@@ -1,0 +1,34 @@
+# Introduction
+
+Smartphone devices may be an easier alternative to obtain data from patients outside of clinics and hospitals environment. In this project, smartphone-based data were obtained from Multiple Sclerosis (MS) patients using a drawing a spiral test. The test was administered in order to measure upper extremity functionality. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+### Libraries
+library(openxlsx)
+library(dplyr)
+library(ggplot2)
+
+```
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+### Import data
+## Description of the data is as follow
+# metaData.ID = Subject ID
+# x: distance (in inches) of the spot drawn from the center of the screen
+# y: distance (in inches) of the spot drawn from the center of the screen
+# p: estimated pressure of the tap (based off of surface area)
+# t: UNIX timestamp of when the drawing happened (to the millisecond)
+# sumData.Num turns: the number of turns in the spiral 
+# sumData.Line width: the width of the lines of the spiral
+# time.point: UNIX timestamp of the drawing (this time in seconds)
+
+
+ms_data <- data_map <- read.xlsx("spiralLH_Obscured.xlsx", colNames = TRUE)
+
+```
+
+
+
