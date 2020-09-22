@@ -24,11 +24,50 @@ library(ggplot2)
 # sumData.Num turns: the number of turns in the spiral 
 # sumData.Line width: the width of the lines of the spiral
 # time.point: UNIX timestamp of the drawing (this time in seconds)
+# metaData.ID: Subject/patient specific ID
 
 
 ms_data <- data_map <- read.xlsx("spiralLH_Obscured.xlsx", colNames = TRUE)
 
+## add a test date to the data
+
+ms_data$testdate <- as.Date(substr(ms_data$metaData.TEST_DATE,1,10))
+
 ```
+
+
+# Features extraction
+
+As previously done in [Creagh et al., 2020](https://iopscience.iop.org/article/10.1088/1361-6579/ab8771/pdf), several features can extracted from drawing shape by an MS patient to capture temporal, spatial,and spatiotemporal factors in the drawing task that could be an indicative of manual dexterity. Thus we start by calculating each of these features:
+
+## Temporal features
+
+To measure temporal irregularities, several authors ( [Banaszkiewicz et al., 2008](https://europepmc.org/article/med/19353440), [Memedi et al., 2015](https://www.mdpi.com/1424-8220/15/9/23727), [Creagh et al., 2020](https://iopscience.iop.org/article/10.1088/1361-6579/ab8771/pdf) ) calculated the drawing velocities,angular and radial velocities to illustrate temporal features that may emerge in the upper extremity function of MS patients. These features were calculated using the following formula from ( [Memedi et al., 2015](https://www.mdpi.com/1424-8220/15/9/23727) and [Creagh et al., 2020](https://iopscience.iop.org/article/10.1088/1361-6579/ab8771/pdf) ):
+
+
+$$v = \sum_{i=1}^{N-1} \frac{\sqrt{(x_{i+1}-x_i)^2 + (y_{i+1}-y_i)^2}}{t_{i+1}-t_i}$$
+with $v$ the drawing velocity. Radial velocity (RV) is calculated as:
+$$RV = \sum_{i=1}^{N-1} \frac{r_{i+1}-r_i}{t_{i+1}-t_i}$$
+where $r = \sqrt{x^2+y^2}$ is the radius. Angular velocity (RHOV) is also calculated as 
+
+$$RV = \sum_{i=1}^{N-1} \frac{\theta_{i+1}-\theta_i}{t_{i+1}-t_i}$$
+
+where $\theta = tan^{-1}\left(\frac{y}{x}\right)$. $x$ and $y$ in each formula are the coordinates of the drawing pixel and $t$ is time in seconds. $N$ is the total number of pixel.
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+
+```
+
+
+
+
+
+
+
 
 
 
