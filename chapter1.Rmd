@@ -26,13 +26,22 @@ library(ggplot2)
 # time.point: UNIX timestamp of the drawing (this time in seconds)
 # metaData.ID: Subject/patient specific ID
 
-
 ms_data <- data_map <- read.xlsx("spiralLH_Obscured.xlsx", colNames = TRUE)
 
 ## add a test date to the data
+ms_data$testdate <- substr(ms_data$metaData.TEST_DATE,1,10)
 
-ms_data$testdate <- as.Date(substr(ms_data$metaData.TEST_DATE,1,10))
-
+## add visit number based on patientID, remove some columns and change column names
+ms_data2 <- ms_data %>% 
+  group_by(metaData.ID) %>%
+  mutate(test_numb = factor(testdate, labels = 1:length(unique(testdate)))) %>% 
+  select(metaData.ID,x,y,time.point,p,metaData.DIFFICULTY,sumData.Num.turns,
+         sumData.Line.width,testdate, test_numb) %>% 
+  rename(patient_id=metaData.ID,t = time.point,difficulty_level=metaData.DIFFICULTY,
+         turn_numb = sumData.Num.turns, line_width=sumData.Line.width)
+  
+  
+#p1 <- subset(ms_data2, patient_id=="rep067")
 ```
 
 
@@ -50,7 +59,7 @@ with $v$ the drawing velocity. Radial velocity (RV) is calculated as:
 $$RV = \sum_{i=1}^{N-1} \frac{r_{i+1}-r_i}{t_{i+1}-t_i}$$
 where $r = \sqrt{x^2+y^2}$ is the radius. Angular velocity (RHOV) is also calculated as 
 
-$$RV = \sum_{i=1}^{N-1} \frac{\theta_{i+1}-\theta_i}{t_{i+1}-t_i}$$
+$$RHOV = \sum_{i=1}^{N-1} \frac{\theta_{i+1}-\theta_i}{t_{i+1}-t_i}$$
 
 where $\theta = tan^{-1}\left(\frac{y}{x}\right)$. $x$ and $y$ in each formula are the coordinates of the drawing pixel and $t$ is time in seconds. $N$ is the total number of pixel.
 
@@ -58,6 +67,14 @@ where $\theta = tan^{-1}\left(\frac{y}{x}\right)$. $x$ and $y$ in each formula a
 
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Obtain the dimension of the data frame
+d = dim(ms_data2)
+
+## Initialize velocity (v), radial velocity (rv), angular velocity (rhov)
+v = rep(0, d[1])
+rv = rep(0, d[1])
+rhov = rep(0, d[1])
+
 
 
 ```
