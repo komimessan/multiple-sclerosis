@@ -31,16 +31,16 @@ ms_data <- data_map <- read.xlsx("spiralLH_Obscured.xlsx", colNames = TRUE)
 ## add a test date to the data
 ms_data$testdate <- substr(ms_data$metaData.TEST_DATE,1,10)
 
-## add visit number based on patientID, remove some columns and change column names
+## add visit number based on patientID and difficulty level, remove some columns and change column names
 ms_data2 <- ms_data %>% 
-  group_by(metaData.ID) %>%
+  group_by(metaData.ID, metaData.DIFFICULTY) %>%
   mutate(test_numb = factor(testdate, labels = 1:length(unique(testdate)))) %>% 
-  select(metaData.ID,x,y,time.point,p,metaData.DIFFICULTY,sumData.Num.turns,
+  select(metaData.ID,x,y,t,p,metaData.DIFFICULTY,sumData.Num.turns,
          sumData.Line.width,testdate, test_numb) %>% 
-  rename(patient_id=metaData.ID,t = time.point,difficulty_level=metaData.DIFFICULTY,
+  rename(patient_id=metaData.ID,difficulty_level=metaData.DIFFICULTY,
          turn_numb = sumData.Num.turns, line_width=sumData.Line.width)
   
-  
+ms_data2$t <- ms_data2$t/1000 ## convert time point from milliseconds to seconds  
 #p1 <- subset(ms_data2, patient_id=="rep067")
 ```
 
@@ -76,6 +76,41 @@ rv = rep(0, d[1])
 rhov = rep(0, d[1])
 
 
+p1 <- subset(ms_data2, patient_id=="rep067") ## select single patient (rep067)
+p11 <- subset(p1, test_numb=="1") ## select one test date (1)
+p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
+
+p111_v = rep(0, dim(p111)[1]) ## initialize the velocity of p111
+
+for (i in 1:(dim(p111)[1]-1)){
+  p111_v[i+1] <- sqrt((p111$x[i+1] - p111$x[i])^2 + (p111$y[i+1] - p111$y[i])^2)/(p111$t[i+1]-p111$t[i])
+}
+
+### 
+ms_data2[,"v_i"] <- 0 ## intialize an empty 0 column of velocities
+
+p.id <- levels(factor(ms_data2$patient_id))
+
+for (id in p.id) {
+  patiend_data <- subset(ms_data2, patient_id==id) ## select a single patient
+  n.test <- levels(factor(patient_data$test_numb))
+  for (tn in n.test) {
+    test_date <- subset(patiend_data, test_numb==tn) ## select one test date
+    d.levels <- levels(factor(test_date$difficulty_level))
+    for (dl in d.levels) {
+      d.level <- subset(test_date, difficulty_level==dl) ## select single difficulty level 
+      
+      for (i in 1:(dim(d.level)[1] - 1)) {
+        d.level[i+1,"v_i"] <- sqrt((d.level$x[i+1] - d.level$x[i])^2 + 
+                                     (d.level$y[i+1] - d.level$y[i])^2
+                                   )/(d.level$t[i+1]-d.level$t[i])
+      }
+      new.d.level <- rbind(new.d.level, d.level) ## figure out how to deal with new.d.level
+    }
+  }
+  
+  
+}
 
 ```
 
