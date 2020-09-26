@@ -7,7 +7,7 @@ Smartphone devices may be an easier alternative to obtain data from patients out
 library(openxlsx)
 library(dplyr)
 library(ggplot2)
-
+library(wavelets) ## for wavelet transform
 ```
 
 
@@ -67,51 +67,76 @@ where $\theta = tan^{-1}\left(\frac{y}{x}\right)$. $x$ and $y$ in each formula a
 
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
-## Obtain the dimension of the data frame
-d = dim(ms_data2)
 
-## Initialize velocity (v), radial velocity (rv), angular velocity (rhov)
-v = rep(0, d[1])
-rv = rep(0, d[1])
-rhov = rep(0, d[1])
-
-
-p1 <- subset(ms_data2, patient_id=="rep067") ## select single patient (rep067)
-p11 <- subset(p1, test_numb=="1") ## select one test date (1)
-p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
-
-p111_v = rep(0, dim(p111)[1]) ## initialize the velocity of p111
-
-for (i in 1:(dim(p111)[1]-1)){
-  p111_v[i+1] <- sqrt((p111$x[i+1] - p111$x[i])^2 + (p111$y[i+1] - p111$y[i])^2)/(p111$t[i+1]-p111$t[i])
-}
-
-### 
+### ## Initialize velocity (v), radial velocity (rv), angular velocity (rhov)
+ms_data2[,"d_t"] <- 0 ## intialize an empty 0 column of delta time
 ms_data2[,"v_i"] <- 0 ## intialize an empty 0 column of velocities
+ms_data2[,"rv_i"] <- 0 ## intialize an empty 0 column of radial velocities
+ms_data2[,"av_i"] <- 0 ## intialize an empty 0 column of angular velocities
 
+# create an empty dataframe to be used later
+new.d.level <- ms_data2[0,]
+
+## factor levels of patient ID
 p.id <- levels(factor(ms_data2$patient_id))
 
+ptm <- proc.time() ## Check how long it will run (will take 1h 52 min to run)
+
 for (id in p.id) {
-  patiend_data <- subset(ms_data2, patient_id==id) ## select a single patient
+  count = count + 1
+  patient_data <- subset(ms_data2, patient_id==id) ## select a single patient
   n.test <- levels(factor(patient_data$test_numb))
   for (tn in n.test) {
-    test_date <- subset(patiend_data, test_numb==tn) ## select one test date
+    test_date <- subset(patient_data, test_numb==tn) ## select one test date
     d.levels <- levels(factor(test_date$difficulty_level))
     for (dl in d.levels) {
-      d.level <- subset(test_date, difficulty_level==dl) ## select single difficulty level 
+      d.level <- subset(test_date, difficulty_level==dl) ## select difficulty level 
       
       for (i in 1:(dim(d.level)[1] - 1)) {
+        d.level[i+1,"d_t"] <- (d.level$t[i+1]-d.level$t[i]) # delta time
         d.level[i+1,"v_i"] <- sqrt((d.level$x[i+1] - d.level$x[i])^2 + 
                                      (d.level$y[i+1] - d.level$y[i])^2
-                                   )/(d.level$t[i+1]-d.level$t[i])
+                                   )/(d.level$t[i+1]-d.level$t[i]) # velocity
+        d.level[i+1,"rv_i"] <- (sqrt((d.level$x[i+1])^2 + (d.level$y[i+1])^2) -                                       sqrt((d.level$x[i])^2 + (d.level$y[i])^2)
+                                )/(d.level$t[i+1]-d.level$t[i]) # radial velocity
+        d.level[i+1,"av_i"] <- (atan(d.level$y[i+1]/d.level$x[i+1]) - 
+                                atan(d.level$y[i]/d.level$x[i])
+                                )/(d.level$t[i+1]-d.level$t[i]) # angular velocity
+        
       }
-      new.d.level <- rbind(new.d.level, d.level) ## figure out how to deal with new.d.level
+        new.d.level <- rbind(new.d.level, d.level) ## append the data
     }
   }
-  
-  
 }
+proc.time() - ptm
 
+## call the final data, ms_data3
+ms_data3 <- new.d.level
+
+
+## Write the ms_data3 containing vi, rvi, and avi to the file to be used later
+#write.xlsx(ms_data3,file = "new_spiralLH.xlsx", colNames = TRUE)
+
+# #### Tryout for a single patient
+# 
+# p1 <- subset(ms_data2, patient_id=="rep067") ## select single patient (rep067)
+# p11 <- subset(p1, test_numb=="1") ## select one test date (1)
+# p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
+# 
+# d.t = rep(0, dim(p111)[1]) ## initialize delta time
+# p111_v = rep(0, dim(p111)[1]) ## initialize the velocity of p111
+# p111_rv = rep(0, dim(p111)[1]) ## initialize the radial velocity
+# p111_av = rep(0, dim(p111)[1]) ## initialize the angular velocity
+# 
+# for (i in 1:(dim(p111)[1]-1)){
+#   d.t[i+1] = (p111$t[i+1]-p111$t[i])
+#   p111_v[i+1] <- sqrt((p111$x[i+1] - p111$x[i])^2 + (p111$y[i+1] - p111$y[i])^2)/(p111$t[i+1]-p111$t[i])
+#   p111_rv[i+1] <-  (sqrt((p111$x[i+1])^2 + (p111$y[i+1])^2) - sqrt((p111$x[i])^2 + (p111$y[i])^2))/(p111$t[i+1]-p111$t[i])
+#   p111_av[i+1] <-  (atan(p111$y[i+1]/p111$x[i+1]) - atan(p111$y[i]/p111$x[i]))/(p111$t[i+1]-p111$t[i])
+# }
+# 
+# p111_rv.dwt <- dwt(p111_rv, filter = "d10")
+# cp111_rv.dwt <- p111_rv.dwt@filter@h ## Coefficient
 ```
 
 
