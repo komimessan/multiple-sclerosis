@@ -4,10 +4,11 @@ Smartphone devices may be an easier alternative to obtain data from patients out
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 ### Libraries
-library(openxlsx)
-library(dplyr)
-library(ggplot2)
-library(wavelets) ## for wavelet transform
+library(openxlsx) ## v. 4.1.5
+library(dplyr) ## v. 1.0.0
+library(ggplot2) ## v. 3.3.1
+library(wavelets) ## v. 0.3.0.2 ## for wavelet transform -- https://cran.r-project.org/web/packages/wavelets/wavelets.pdf
+library(signal) ## v. 0.7.6 ## for filtering -- https://cran.r-project.org/web/packages/signal/signal.pdf
 ```
 
 
@@ -119,9 +120,18 @@ ms_data3 <- new.d.level
 
 # #### Tryout for a single patient
 # 
-# p1 <- subset(ms_data2, patient_id=="rep067") ## select single patient (rep067)
-# p11 <- subset(p1, test_numb=="1") ## select one test date (1)
-# p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
+p1 <- subset(ms_data3, patient_id=="rep269") ## select single patient (rep067)
+p11 <- subset(p1, test_numb=="1") ## select one test date (1)
+p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
+
+### filter the speed fequency by 8 Hz
+bf <- butter(3, 0.08) # 8 Hz low-pass filter
+t <- p111$t - p111$t[1]
+x <- p111$v_i
+z <- filter(bf, x) # apply filter
+plot(t, x, type = "l")
+lines(t, z, col = "red")
+
 # 
 # d.t = rep(0, dim(p111)[1]) ## initialize delta time
 # p111_v = rep(0, dim(p111)[1]) ## initialize the velocity of p111
