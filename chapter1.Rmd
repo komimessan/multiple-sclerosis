@@ -9,6 +9,8 @@ library(dplyr) ## v. 1.0.0
 library(ggplot2) ## v. 3.3.1
 library(wavelets) ## v. 0.3.0.2 ## for wavelet transform -- https://cran.r-project.org/web/packages/wavelets/wavelets.pdf
 library(signal) ## v. 0.7.6 ## for filtering -- https://cran.r-project.org/web/packages/signal/signal.pdf
+library(e1071) ## v. 1.7.3
+library(psd) ## v. 2.1.0 ## power spectral density -- https://cran.r-project.org/web/packages/psd/psd.pdf
 ```
 
 
@@ -35,14 +37,22 @@ ms_data$testdate <- substr(ms_data$metaData.TEST_DATE,1,10)
 ## add visit number based on patientID and difficulty level, remove some columns and change column names
 ms_data2 <- ms_data %>% 
   group_by(metaData.ID, metaData.DIFFICULTY) %>%
-  mutate(test_numb = factor(testdate, labels = 1:length(unique(testdate)))) %>% 
-  select(metaData.ID,x,y,t,p,metaData.DIFFICULTY,sumData.Num.turns,
-         sumData.Line.width,testdate, test_numb) %>% 
-  rename(patient_id=metaData.ID,difficulty_level=metaData.DIFFICULTY,
+  mutate(ntest_date = factor(testdate, labels = 1:length(unique(testdate)))) %>% 
+  dplyr::select(metaData.ID,x,y,t,p,metaData.DIFFICULTY,sumData.Num.turns,
+         sumData.Line.width,testdate, ntest_date) %>% 
+  dplyr::rename(patient_id=metaData.ID,difficulty_level=metaData.DIFFICULTY,
          turn_numb = sumData.Num.turns, line_width=sumData.Line.width)
   
 ms_data2$t <- ms_data2$t/1000 ## convert time point from milliseconds to seconds  
 #p1 <- subset(ms_data2, patient_id=="rep067")
+
+## add time that is scaled from 0 by patient_id, ntest_date, and difficulty_level
+ms_data2 <- ms_data2 %>% 
+  group_by(patient_id, ntest_date, difficulty_level) %>% 
+  arrange(t) %>% 
+  mutate(pixel = row_number(), time = t-t[1])
+  
+  
 ```
 
 
@@ -81,28 +91,28 @@ new.d.level <- ms_data2[0,]
 ## factor levels of patient ID
 p.id <- levels(factor(ms_data2$patient_id))
 
-ptm <- proc.time() ## Check how long it will run (will take 1h 52 min to run)
+ptm <- proc.time() ## Check how long it will run (will take 2h 9 min to run)
 
 for (id in p.id) {
   count = count + 1
   patient_data <- subset(ms_data2, patient_id==id) ## select a single patient
-  n.test <- levels(factor(patient_data$test_numb))
+  n.test <- levels(factor(patient_data$ntest_date))
   for (tn in n.test) {
-    test_date <- subset(patient_data, test_numb==tn) ## select one test date
+    test_date <- subset(patient_data, ntest_date==tn) ## select one test date
     d.levels <- levels(factor(test_date$difficulty_level))
     for (dl in d.levels) {
       d.level <- subset(test_date, difficulty_level==dl) ## select difficulty level 
       
       for (i in 1:(dim(d.level)[1] - 1)) {
-        d.level[i+1,"d_t"] <- (d.level$t[i+1]-d.level$t[i]) # delta time
+        d.level[i+1,"d_t"] <- (d.level$time[i+1]-d.level$time[i]) # delta time
         d.level[i+1,"v_i"] <- sqrt((d.level$x[i+1] - d.level$x[i])^2 + 
                                      (d.level$y[i+1] - d.level$y[i])^2
-                                   )/(d.level$t[i+1]-d.level$t[i]) # velocity
+                                   )/(d.level$time[i+1]-d.level$time[i]) # velocity
         d.level[i+1,"rv_i"] <- (sqrt((d.level$x[i+1])^2 + (d.level$y[i+1])^2) -                                       sqrt((d.level$x[i])^2 + (d.level$y[i])^2)
-                                )/(d.level$t[i+1]-d.level$t[i]) # radial velocity
+                                )/(d.level$time[i+1]-d.level$time[i]) # radial velocity
         d.level[i+1,"av_i"] <- (atan(d.level$y[i+1]/d.level$x[i+1]) - 
                                 atan(d.level$y[i]/d.level$x[i])
-                                )/(d.level$t[i+1]-d.level$t[i]) # angular velocity
+                                )/(d.level$time[i+1]-d.level$time[i]) # angular velocity
         
       }
         new.d.level <- rbind(new.d.level, d.level) ## append the data
@@ -115,41 +125,117 @@ proc.time() - ptm
 ms_data3 <- new.d.level
 
 
-## Write the ms_data3 containing vi, rvi, and avi to the file to be used later
-#write.xlsx(ms_data3,file = "new_spiralLH.xlsx", colNames = TRUE)
 
-# #### Tryout for a single patient
+# ## Write the ms_data3 containing vi, rvi, and avi to the file to be used later
+# #write.xlsx(ms_data3,file = "new_spiralLH.xlsx", colNames = TRUE)
 # 
-p1 <- subset(ms_data3, patient_id=="rep269") ## select single patient (rep067)
-p11 <- subset(p1, test_numb=="1") ## select one test date (1)
-p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
-
-### filter the speed fequency by 8 Hz
-bf <- butter(3, 0.08) # 8 Hz low-pass filter
-t <- p111$t - p111$t[1]
-x <- p111$v_i
-z <- filter(bf, x) # apply filter
-plot(t, x, type = "l")
-lines(t, z, col = "red")
-
+# # #### Tryout for a single patient
+# # 
+# ms_data3p <- subset(ms_data3, v_i>0)
 # 
+# p1 <- subset(ms_data2, patient_id=="rep205") ## select single patient (rep067)
+# p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
+# p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
+# # 
+# # ### filter the speed fequency by 8 Hz
+# # bf <- butter(3, 0.08) # 8 Hz low-pass filter
+# # t <- p111$t - p111$t[1]
+# # x <- p111$v_i
+# # z <- filter(bf, x) # apply filter
+# # plot(t, x, type = "l")
+# # lines(t, z, col = "red")
+# # 
+# # # 
 # d.t = rep(0, dim(p111)[1]) ## initialize delta time
 # p111_v = rep(0, dim(p111)[1]) ## initialize the velocity of p111
 # p111_rv = rep(0, dim(p111)[1]) ## initialize the radial velocity
 # p111_av = rep(0, dim(p111)[1]) ## initialize the angular velocity
-# 
+# #
 # for (i in 1:(dim(p111)[1]-1)){
 #   d.t[i+1] = (p111$t[i+1]-p111$t[i])
 #   p111_v[i+1] <- sqrt((p111$x[i+1] - p111$x[i])^2 + (p111$y[i+1] - p111$y[i])^2)/(p111$t[i+1]-p111$t[i])
 #   p111_rv[i+1] <-  (sqrt((p111$x[i+1])^2 + (p111$y[i+1])^2) - sqrt((p111$x[i])^2 + (p111$y[i])^2))/(p111$t[i+1]-p111$t[i])
 #   p111_av[i+1] <-  (atan(p111$y[i+1]/p111$x[i+1]) - atan(p111$y[i]/p111$x[i]))/(p111$t[i+1]-p111$t[i])
 # }
-# 
-# p111_rv.dwt <- dwt(p111_rv, filter = "d10")
-# cp111_rv.dwt <- p111_rv.dwt@filter@h ## Coefficient
+# # # 
+# # p111_rv.dwt <- dwt(p111_rv, filter = "d10")
+# # cp111_rv.dwt <- p111_rv.dwt@filter@h ## Coefficient
 ```
 
 
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+
+# create template for plot labelling
+black.bold.text1 <- element_text(face = "bold", color = "black",size=24) # x and y axis
+black.bold.text2 <- element_text(face = "bold", color = "black",size=24) # title
+Nice.Label <-theme(axis.text.x = element_text(face="bold", color="black", size=16),
+         axis.text.y = element_text(face="bold", color="black", size=16),
+         title=black.bold.text2,axis.title = black.bold.text1, legend.position = "right",legend.box = "vertical",
+         legend.text = element_text(size=24),strip.text.x = element_text(face="bold",size=24)) #18 or 24
+
+
+##### Plot some of the data
+p1 <- subset(ms_data3, patient_id=="rep067") ## select single patient (rep067)
+p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
+p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
+
+p111$pixel <-  1:nrow(p111)## itemize pixel from 1 to n
+
+p11 <- p11 %>% group_by(difficulty_level) %>% 
+  arrange(t) %>% 
+  mutate(pixel = row_number(), time = t-t[1])
+  
+
+
+### raw drawing
+ggplot(p11, aes(x=x, y= y))+
+  geom_point(size  = 2)+
+  #geom_path(size = .9, lineend = "round", orientation = t) +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "x", y = "y") + 
+  theme_bw() 
+
+### velocity vs. pixels
+ggplot(p11, aes(x=pixel, y= v_i))+
+  geom_point(size  = 2.0)+
+  geom_line(size = 0.9) +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Pixels", y = "Drawing Velocity (Pixels/s)") + 
+  theme_bw() 
+
+### velocity vs. time
+ggplot(p11, aes(x=time, y= v_i))+
+  geom_point(size  = 2.0)+
+  geom_line(size = 0.9) +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Time (s)", y = "Drawing Velocity (Pixels/s)") + 
+  theme_bw() 
+
+
+```
+
+
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## calculate the sum, coefiicient of variation, skew for v, rv, and av
+
+## Function to calculate coefficient of variation
+cv = function(vector){
+  coefvar <- sd(vector, na.rm = TRUE)/ mean(vector, na.rm = TRUE)
+  return(coefvar)
+}
+
+ms_data.av <- ms_data3 %>% 
+  group_by(patient_id,test_numb,difficulty_level) %>% 
+  summarise(v_sum = sum(v_i), v_cv = cv(v_i), v_sk = skewness(v_i),
+            rv_sum = sum(rv_i), rv_cv = cv(rv_i), rv_sk = skewness(rv_i),
+            av_sum = sum(av_i), av_cv = cv(av_i), av_sk = skewness(av_i)) %>% 
+  rename(test_date = test_numb)
+  
+```
 
 
 
