@@ -12,6 +12,7 @@ library(signal) ## v. 0.7.6 ## for filtering -- https://cran.r-project.org/web/p
 library(e1071) ## v. 1.7.3
 library(psd) ## v. 2.1.0 ## power spectral density -- https://cran.r-project.org/web/packages/psd/psd.pdf
 library(TSEntropies) ## v. 0.9 ## to calculate Approximate Entropies (ApEn)-- https://cran.r-project.org/web/packages/TSEntropies/TSEntropies.pdf
+library(oce) ## v.1.2.0 ## oceanographic library which contain PSD with hamming window
 ```
 
 
@@ -226,9 +227,24 @@ cv = function(vector){
 
 ms_data.av <- ms_data3 %>% 
   group_by(patient_id,ntest_date,difficulty_level) %>% 
-  summarise(v_sum = sum(v_i), v_cv = cv(v_i), v_sk = skewness(v_i),
+  summarise(v_sum = sum(v_i), v_cv = cv(v_i), v_sk = skewness(v_i), 
+            v_kt = kurtosis(v_i), 
             rv_sum = sum(rv_i), rv_cv = cv(rv_i), rv_sk = skewness(rv_i),
-            av_sum = sum(av_i), av_cv = cv(av_i), av_sk = skewness(av_i))
+            rv_kt = kurtosis(rv_i),
+            av_sum = sum(av_i), av_cv = cv(av_i), av_sk = skewness(av_i), 
+            av_kt = kurtosis(av_i))
+
+
+#### Power Spectral Density using Welsh periodogram with a Hamming window
+## Maximum PSD and dominant i.e., frequency corresponding to max(PSD)--see Creagh et. al, 2020
+ms_data.psd <- ms_data3 %>% 
+   group_by(patient_id,ntest_date,difficulty_level) %>%
+  summarise(v_psd.max = max(pwelch(v_i)$spec), 
+            v_df = pwelch(v_i)$freq[which.max(pwelch(v_i)$spec)],
+            rv_psd.max = max(pwelch(rv_i)$spec),
+            rv_df = pwelch(rv_i)$freq[which.max(pwelch(rv_i)$spec)],
+            av_psd.max = max(pwelch(av_i)$spec),
+            av_df = pwelch(av_i)$freq[which.max(pwelch(av_i)$spec)])
 
 ### Approximate Entropy (ApEn)
 ## Interpolate all v_i, r_vi, av_i over a fixed length L = 500 (see similar approach in Creagh et al., 2020) and calculate their entropy 
