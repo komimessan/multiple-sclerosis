@@ -13,6 +13,7 @@ library(e1071) ## v. 1.7.3
 library(psd) ## v. 2.1.0 ## power spectral density -- https://cran.r-project.org/web/packages/psd/psd.pdf
 library(TSEntropies) ## v. 0.9 ## to calculate Approximate Entropies (ApEn)-- https://cran.r-project.org/web/packages/TSEntropies/TSEntropies.pdf
 library(oce) ## v.1.2.0 ## oceanographic library which contain PSD with hamming window
+library(tidyr) ## v. 1.1.0 ## for gather and wide
 ```
 
 
@@ -97,6 +98,9 @@ ms_data3 <- merge(ms_data2,metadata_sub, by = "patient_id")
 ## Recalculate the age from their birth date to the testdate
 ms_data3$age <- round(lubridate::time_length(difftime(ms_data3$testdate,
                                                 ms_data3$birth_date),"years"))
+## Arrange ms_data3 by patient_id,ntest_date, difficulty_level, trial_id, and time
+
+ms_data3 <- arrange(ms_data3,patient_id,ntest_date, difficulty_level, trial_id, time)
   
 ```
 
@@ -104,14 +108,6 @@ ms_data3$age <- round(lubridate::time_length(difftime(ms_data3$testdate,
 
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
-
-
-## 
-p1 <- subset(ms_data3, patient_id=="NIB204") ## select single patient ##NDS678
-p11 <- subset(p1, ntest_date=="1") ## select one test date 
-p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level   
-
-
 # create template for plot labelling
 black.bold.text1 <- element_text(face = "bold", color = "black",size=24) # x and y axis
 black.bold.text2 <- element_text(face = "bold", color = "black",size=24) # title
@@ -120,12 +116,24 @@ Nice.Label <-theme(axis.text.x = element_text(face="bold", color="black", size=1
          title=black.bold.text2,axis.title = black.bold.text1, legend.position = "right",legend.box = "vertical",
          legend.text = element_text(size=24),strip.text.x = element_text(face="bold",size=24)) #18 or 24
 
-### Plot the distribution of the type of data we have by Diagnosis
+### Tranform from long tabel to wide table
 
+metadata_sub.long <- metadata_sub %>% 
+  dplyr::select(patient_id,diagnosis_group,dominant_hand, gender) %>% 
+  tidyr::gather(group, attribute, diagnosis_group:gender, factor_key = TRUE) 
+
+metadata_sub.long$group <- factor(metadata_sub.long$group,
+                                  levels = c("diagnosis_group","gender","dominant_hand"),
+                                  labels = c("Diagnosis Categories", "Gender", "Dominant Hand"))
+
+### Plot the distribution of the type of data we have 
+ggplot(metadata_sub.long, aes(x=attribute)) +
+  geom_bar(colour = "gray", width = 0.5) +
+  facet_wrap(~group, scales = "free", nrow = 1) +
+  labs(x = " ", y = "Number of Cohorts") +
+  theme_bw()+Nice.Label
 
 ```
-
-
 
 
 
@@ -152,53 +160,59 @@ where $\theta = tan^{-1}\left(\frac{y}{x}\right)$. $x$ and $y$ in each formula a
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
-### Calculate velocity (v), radial velocity (rv), angular velocity (av) by patients, test date, and difficulty level
-# ## Initialize velocity (v), radial velocity (rv), angular velocity (rhov)
-# ms_data2[,"d_t"] <- 0 ## intialize an empty 0 column of delta time
-# ms_data2[,"v_i"] <- 0 ## intialize an empty 0 column of velocities
-# ms_data2[,"rv_i"] <- 0 ## intialize an empty 0 column of radial velocities
-# ms_data2[,"av_i"] <- 0 ## intialize an empty 0 column of angular velocities
-# 
-# # create an empty dataframe to be used later
-# new.d.level <- ms_data2[0,]
-# 
-# ## factor levels of patient ID
-# p.id <- levels(factor(ms_data2$patient_id))
-# 
-# ptm <- proc.time() ## Check how long it will run (will take 2h 9 min to run)
-# 
-# for (id in p.id) {
-#   patient_data <- subset(ms_data2, patient_id==id) ## select a single patient
-#   n.test <- levels(factor(patient_data$ntest_date))
-#   for (tn in n.test) {
-#     test_date <- subset(patient_data, ntest_date==tn) ## select one test date
-#     d.levels <- levels(factor(test_date$difficulty_level))
-#     for (dl in d.levels) {
-#       d.level <- subset(test_date, difficulty_level==dl) ## select difficulty level
-# 
-#       for (i in 1:(dim(d.level)[1] - 1)) {
-#         d.level[i+1,"d_t"] <- (d.level$time[i+1]-d.level$time[i]) # delta time
-#         d.level[i+1,"v_i"] <- sqrt((d.level$x[i+1] - d.level$x[i])^2 +
-#                                      (d.level$y[i+1] - d.level$y[i])^2
-#                                    )/(d.level$time[i+1]-d.level$time[i]) # velocity
-#         d.level[i+1,"rv_i"] <- (sqrt((d.level$x[i+1])^2 + (d.level$y[i+1])^2) -                                       sqrt((d.level$x[i])^2 + (d.level$y[i])^2)
-#                                 )/(d.level$time[i+1]-d.level$time[i]) # radial velocity
-#         d.level[i+1,"av_i"] <- (atan(d.level$y[i+1]/d.level$x[i+1]) -
-#                                 atan(d.level$y[i]/d.level$x[i])
-#                                 )/(d.level$time[i+1]-d.level$time[i]) # angular velocity
-# 
-#       }
-#         new.d.level <- rbind(new.d.level, d.level) ## append the data
-#     }
-#   }
-# }
-# proc.time() - ptm
-#  
-# # ## call the final data, ms_data3
-# ms_data3 <- new.d.level
+## Calculate velocity (v), radial velocity (rv), angular velocity (av) by patients, test date, and difficulty level
+## Initialize velocity (v), radial velocity (rv), angular velocity (rhov)
+ms_data3[,"d_t"] <- 0 ## intialize an empty 0 column of delta time
+ms_data3[,"v_i"] <- 0 ## intialize an empty 0 column of velocities
+ms_data3[,"rv_i"] <- 0 ## intialize an empty 0 column of radial velocities
+ms_data3[,"av_i"] <- 0 ## intialize an empty 0 column of angular velocities
+
+# create an empty dataframe to be used later
+new.tr.level <- ms_data3[0,]
+
+## factor levels of patient ID
+p.id <- levels(factor(ms_data3$patient_id))
+
+ptm <- proc.time() ## Check how long it will run (will take 2h 9 min to run)
+
+for (id in p.id) {
+  patient_data <- subset(ms_data3, patient_id==id) ## select a single patient
+  n.test <- levels(factor(patient_data$ntest_date))
+  for (tn in n.test) {
+    test_date <- subset(patient_data, ntest_date==tn) ## select one test date
+    d.levels <- levels(factor(test_date$difficulty_level))
+    for (dl in d.levels) {
+      d.level <- subset(test_date, difficulty_level==dl) ## select difficulty level
+      tr.levels <- levels(factor(d.level$trial_id))
+      for (tr in tr.levels){
+        tr.level <- subset(d.level, trial_id==tr) ## select trial_id
+        dim_tr.level1 <- dim(tr.level)[1] ## Make sure the dimension of each trial > 2
+        if (dim_tr.level1>2){
+          for (i in 1:(dim_tr.level1 - 1)) {
+            tr.level[i+1,"d_t"] <- (tr.level$time[i+1]-tr.level$time[i]) # delta time
+            tr.level[i+1,"v_i"] <- sqrt((tr.level$x[i+1] - tr.level$x[i])^2 +
+                                          (tr.level$y[i+1] - tr.level$y[i])^2
+            )/(tr.level$time[i+1]-tr.level$time[i]) # velocity
+            tr.level[i+1,"rv_i"] <- (sqrt((tr.level$x[i+1])^2 + (tr.level$y[i+1])^2) -                                       sqrt((tr.level$x[i])^2 + (tr.level$y[i])^2)
+            )/(tr.level$time[i+1]-tr.level$time[i]) # radial velocity
+            tr.level[i+1,"av_i"] <- (atan(tr.level$y[i+1]/tr.level$x[i+1]) -
+                                       atan(tr.level$y[i]/tr.level$x[i])
+            )/(tr.level$time[i+1]-tr.level$time[i]) # angular velocity
+            
+          }
+          new.tr.level <- rbind(new.tr.level, tr.level) ## append the data
+        }
+      }
+    }
+  }
+}
+proc.time() - ptm
+
+# ## call the final data, ms_data3
+ms_data4 <- new.tr.level
 
 ## The code to calculate v, rv, and av take long so the data was saved to be used later
-ms_data3 <- read.xlsx("new_spiralLH.xlsx", colNames = TRUE)
+ms_data4 <- read.xlsx("new_spiralLH.xlsx", colNames = TRUE)
 
 
 # ## Write the ms_data3 containing vi, rvi, and avi to the file to be used later
@@ -207,31 +221,33 @@ ms_data3 <- read.xlsx("new_spiralLH.xlsx", colNames = TRUE)
 # # #### Tryout for a single patient
 # # 
 # ms_data3p <- subset(ms_data3, v_i>0)
-# 
-# p1 <- subset(ms_data2, patient_id=="rep205") ## select single patient (rep067)
-# p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
-# p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
-# # 
-# # ### filter the speed fequency by 8 Hz
-# # bf <- butter(3, 0.08) # 8 Hz low-pass filter
-# # t <- p111$t - p111$t[1]
-# # x <- p111$v_i
-# # z <- filter(bf, x) # apply filter
-# # plot(t, x, type = "l")
-# # lines(t, z, col = "red")
-# # 
-# # # 
-# d.t = rep(0, dim(p111)[1]) ## initialize delta time
-# p111_v = rep(0, dim(p111)[1]) ## initialize the velocity of p111
-# p111_rv = rep(0, dim(p111)[1]) ## initialize the radial velocity
-# p111_av = rep(0, dim(p111)[1]) ## initialize the angular velocity
+
+## 
+p1 <- subset(ms_data3, patient_id=="NIB112") ## select single patient ##NDS668, NDS670
+p11 <- subset(p1, ntest_date=="1") ## select one test date 
+p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level 
+p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## select one trial_id
+#
+# ### filter the speed fequency by 8 Hz
+# bf <- butter(3, 0.08) # 8 Hz low-pass filter
+# t <- p111$t - p111$t[1]
+# x <- p111$v_i
+# z <- filter(bf, x) # apply filter
+# plot(t, x, type = "l")
+# lines(t, z, col = "red")
+#
 # #
-# for (i in 1:(dim(p111)[1]-1)){
-#   d.t[i+1] = (p111$t[i+1]-p111$t[i])
-#   p111_v[i+1] <- sqrt((p111$x[i+1] - p111$x[i])^2 + (p111$y[i+1] - p111$y[i])^2)/(p111$t[i+1]-p111$t[i])
-#   p111_rv[i+1] <-  (sqrt((p111$x[i+1])^2 + (p111$y[i+1])^2) - sqrt((p111$x[i])^2 + (p111$y[i])^2))/(p111$t[i+1]-p111$t[i])
-#   p111_av[i+1] <-  (atan(p111$y[i+1]/p111$x[i+1]) - atan(p111$y[i]/p111$x[i]))/(p111$t[i+1]-p111$t[i])
-# }
+d.t = rep(0, dim(p1111)[1]) ## initialize delta time
+p1111_v = rep(0, dim(p1111)[1]) ## initialize the velocity of p111
+p1111_rv = rep(0, dim(p1111)[1]) ## initialize the radial velocity
+p1111_av = rep(0, dim(p1111)[1]) ## initialize the angular velocity
+#
+for (i in 1:(dim(p1111)[1]-1)){
+  d.t[i+1] = (p1111$time[i+1]-p1111$time[i])
+  p1111_v[i+1] <- sqrt((p1111$x[i+1] - p1111$x[i])^2 + (p1111$y[i+1] - p1111$y[i])^2)/(p1111$time[i+1]-p1111$time[i])
+  p1111_rv[i+1] <-  (sqrt((p1111$x[i+1])^2 + (p1111$y[i+1])^2) - sqrt((p1111$x[i])^2 + (p1111$y[i])^2))/(p1111$time[i+1]-p1111$time[i])
+  p1111_av[i+1] <-  (atan(p1111$y[i+1]/p1111$x[i+1]) - atan(p1111$y[i]/p1111$x[i]))/(p1111$time[i+1]-p1111$time[i])
+}
 # # # 
 # # p111_rv.dwt <- dwt(p111_rv, filter = "d10")
 # # cp111_rv.dwt <- p111_rv.dwt@filter@h ## Coefficient
