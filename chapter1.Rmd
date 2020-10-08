@@ -31,31 +31,102 @@ library(oce) ## v.1.2.0 ## oceanographic library which contain PSD with hamming 
 # time.point: UNIX timestamp of the drawing (this time in seconds)
 # metaData.ID: Subject/patient specific ID
 
-ms_data <- read.xlsx("spiralLH_Obscured.xlsx", colNames = TRUE)
 
-## add a test date to the data
-ms_data$testdate <- substr(ms_data$metaData.TEST_DATE,1,10)
+ms_data <- read.csv("spiralDataCorrected.csv", header = TRUE)
+metadata <- read.xlsx("Handedness.xlsx", colNames = TRUE)
+
+## add a test date to the data 
+ms_data$testdate <- substr(ms_data$testDate,1,10)
+
+## Remove non-relevant rows that have patient ID such as x:1234455
+ms_data <- ms_data[substr(ms_data$patientID,1,2) != "x:" & 
+                     substr(ms_data$patientID,1,2) != "{t" & 
+                     substr(ms_data$patientID,1,2) != "y:" &
+                     substr(ms_data$patientID,1,2) != "z:" &
+                     substr(ms_data$patientID,1,2) != "t:" &
+                     substr(ms_data$patientID,1,2) != "" &
+                     substr(ms_data$patientID,1,11) != "UPLOAD_DATE" &
+                     substr(ms_data$patientID,1,9) != "Altitude:",]
+
+## and convert variable to numeric
+ms_data$x <- as.numeric(as.character(ms_data$x))
+ms_data$y <- as.numeric(as.character(ms_data$y))
+ms_data$t <- as.numeric(as.character(ms_data$t))
+ms_data$p <- as.numeric(as.character(ms_data$p))
+ms_data$age <- as.numeric(as.character(ms_data$age))
+
 
 ## add visit number based on patientID and difficulty level, remove some columns and change column names
 ms_data2 <- ms_data %>% 
-  group_by(metaData.ID, metaData.DIFFICULTY) %>%
+  group_by(patientID, difficulty) %>%
   mutate(ntest_date = factor(testdate, labels = 1:length(unique(testdate)))) %>% 
-  dplyr::select(metaData.ID,x,y,t,p,metaData.DIFFICULTY,sumData.Num.turns,
-         sumData.Line.width,testdate, ntest_date) %>% 
-  dplyr::rename(patient_id=metaData.ID,difficulty_level=metaData.DIFFICULTY,
-         turn_numb = sumData.Num.turns, line_width=sumData.Line.width)
-  
-ms_data2$t <- ms_data2$t/1000 ## convert time point from milliseconds to seconds  
-#p1 <- subset(ms_data2, patient_id=="rep067")
+  dplyr::select(trialID, patientID,x,y,t,p,ntest_date,difficulty,age, testdate) %>% 
+  dplyr::rename(trial_id = trialID, patient_id=patientID,difficulty_level=difficulty)
 
-## add time that is scaled from 0 by patient_id, ntest_date, and difficulty_level
+  
+ms_data2$t <- ms_data2$t/1000 ## convert time point from milliseconds to seconds 
+
+## add time that is scaled from 0 by patient_id, ntest_date, and difficulty_level and remove duplicate x, y, t
 ms_data2 <- ms_data2 %>% 
-  group_by(patient_id, ntest_date, difficulty_level) %>% 
+  group_by(patient_id, ntest_date, difficulty_level, trial_id) %>% 
+  distinct(x,y,t,p, .keep_all = TRUE) %>% 
   arrange(t) %>% 
   mutate(pixel = row_number(), time = t-t[1])
-  
+
+## Select Patient_id from the main data that are in the Patient code of the metadata
+ms_data2 <- ms_data2 %>% dplyr::filter(patient_id %in% metadata$PatientCode)
+
+
+#### Add new diagnosis category to the metadata (MS, HV, and Others for all others disorder)
+metadata$diagnosis_group <- ifelse(metadata$Diagnosis=="MS","MS",
+                                   ifelse(metadata$Diagnosis=="HV","HV", "Others"))
+
+## Convert birth dates to date format
+metadata$`Birth.month/year` <- as.Date(metadata$`Birth.month/year`, origin = "1900-01-01")
+
+## Create metadata that contain patient that intersect with those in the ms_data
+metadata_sub <- metadata %>% 
+  dplyr::filter(PatientCode %in% ms_data2$patient_id) %>% 
+  dplyr::rename(dominant_hand = Dominant.Hand, patient_id=PatientCode,
+                birth_date=`Birth.month/year`, gender=Gender, diagnosis=Diagnosis)
+
+### Join the metadata to the ms_data2 
+ms_data3 <- merge(ms_data2,metadata_sub, by = "patient_id")
+
+
+## Recalculate the age from their birth date to the testdate
+ms_data3$age <- round(lubridate::time_length(difftime(ms_data3$testdate,
+                                                ms_data3$birth_date),"years"))
   
 ```
+
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+
+
+## 
+p1 <- subset(ms_data3, patient_id=="NIB204") ## select single patient ##NDS678
+p11 <- subset(p1, ntest_date=="1") ## select one test date 
+p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level   
+
+
+# create template for plot labelling
+black.bold.text1 <- element_text(face = "bold", color = "black",size=24) # x and y axis
+black.bold.text2 <- element_text(face = "bold", color = "black",size=24) # title
+Nice.Label <-theme(axis.text.x = element_text(face="bold", color="black", size=16),
+         axis.text.y = element_text(face="bold", color="black", size=16),
+         title=black.bold.text2,axis.title = black.bold.text1, legend.position = "right",legend.box = "vertical",
+         legend.text = element_text(size=24),strip.text.x = element_text(face="bold",size=24)) #18 or 24
+
+### Plot the distribution of the type of data we have by Diagnosis
+
+
+```
+
+
+
 
 
 # Features extraction
@@ -81,7 +152,7 @@ where $\theta = tan^{-1}\left(\frac{y}{x}\right)$. $x$ and $y$ in each formula a
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
-# ### Calculate velocity (v), radial velocity (rv), angular velocity (av) by patients, test date, and difficulty level 
+### Calculate velocity (v), radial velocity (rv), angular velocity (av) by patients, test date, and difficulty level
 # ## Initialize velocity (v), radial velocity (rv), angular velocity (rhov)
 # ms_data2[,"d_t"] <- 0 ## intialize an empty 0 column of delta time
 # ms_data2[,"v_i"] <- 0 ## intialize an empty 0 column of velocities
@@ -97,34 +168,33 @@ where $\theta = tan^{-1}\left(\frac{y}{x}\right)$. $x$ and $y$ in each formula a
 # ptm <- proc.time() ## Check how long it will run (will take 2h 9 min to run)
 # 
 # for (id in p.id) {
-#   count = count + 1
 #   patient_data <- subset(ms_data2, patient_id==id) ## select a single patient
 #   n.test <- levels(factor(patient_data$ntest_date))
 #   for (tn in n.test) {
 #     test_date <- subset(patient_data, ntest_date==tn) ## select one test date
 #     d.levels <- levels(factor(test_date$difficulty_level))
 #     for (dl in d.levels) {
-#       d.level <- subset(test_date, difficulty_level==dl) ## select difficulty level 
-#       
+#       d.level <- subset(test_date, difficulty_level==dl) ## select difficulty level
+# 
 #       for (i in 1:(dim(d.level)[1] - 1)) {
 #         d.level[i+1,"d_t"] <- (d.level$time[i+1]-d.level$time[i]) # delta time
-#         d.level[i+1,"v_i"] <- sqrt((d.level$x[i+1] - d.level$x[i])^2 + 
+#         d.level[i+1,"v_i"] <- sqrt((d.level$x[i+1] - d.level$x[i])^2 +
 #                                      (d.level$y[i+1] - d.level$y[i])^2
 #                                    )/(d.level$time[i+1]-d.level$time[i]) # velocity
 #         d.level[i+1,"rv_i"] <- (sqrt((d.level$x[i+1])^2 + (d.level$y[i+1])^2) -                                       sqrt((d.level$x[i])^2 + (d.level$y[i])^2)
 #                                 )/(d.level$time[i+1]-d.level$time[i]) # radial velocity
-#         d.level[i+1,"av_i"] <- (atan(d.level$y[i+1]/d.level$x[i+1]) - 
+#         d.level[i+1,"av_i"] <- (atan(d.level$y[i+1]/d.level$x[i+1]) -
 #                                 atan(d.level$y[i]/d.level$x[i])
 #                                 )/(d.level$time[i+1]-d.level$time[i]) # angular velocity
-#         
+# 
 #       }
 #         new.d.level <- rbind(new.d.level, d.level) ## append the data
 #     }
 #   }
 # }
 # proc.time() - ptm
-# 
-# ## call the final data, ms_data3
+#  
+# # ## call the final data, ms_data3
 # ms_data3 <- new.d.level
 
 ## The code to calculate v, rv, and av take long so the data was saved to be used later
@@ -170,28 +240,27 @@ ms_data3 <- read.xlsx("new_spiralLH.xlsx", colNames = TRUE)
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
 
-# create template for plot labelling
-black.bold.text1 <- element_text(face = "bold", color = "black",size=24) # x and y axis
-black.bold.text2 <- element_text(face = "bold", color = "black",size=24) # title
-Nice.Label <-theme(axis.text.x = element_text(face="bold", color="black", size=16),
-         axis.text.y = element_text(face="bold", color="black", size=16),
-         title=black.bold.text2,axis.title = black.bold.text1, legend.position = "right",legend.box = "vertical",
-         legend.text = element_text(size=24),strip.text.x = element_text(face="bold",size=24)) #18 or 24
-
 
 ##### Plot some of the data
-p1 <- subset(ms_data3, patient_id=="rep067") ## select single patient (rep067)
+p1 <- subset(ms_data3, patient_id=="rep029") ## select single patient (rep067)
+p1$difficulty_level <- factor(p1$difficulty_level, 
+                              labels = c("Difficulty Level 1","Difficulty Level 2",
+                                                              "Difficulty Level 3"))
 p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
 p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
 
+## select only one trial_id
+p11_sub <- p11 %>% 
+  group_by(difficulty_level) %>% 
+  dplyr::filter(trial_id==levels(factor(trial_id))[2])
 
 ### raw drawing
-ggplot(p11, aes(x=x, y= y))+
+ggplot(p11_sub, aes(x=x, y= y))+
   geom_point(size  = 2)+
-  #geom_path(size = .9, lineend = "round", orientation = t) +
+  geom_path(size = .9, lineend = "round", orientation = t) +
   facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
-  labs(x = "x", y = "y") + 
-  theme_bw() 
+  labs(x = "X-Coordinates", y = "Y-Coordinates") + 
+  theme_bw() + Nice.Label
 
 ### velocity vs. pixels
 ggplot(p11, aes(x=pixel, y= v_i))+
@@ -207,7 +276,7 @@ ggplot(p11, aes(x=time, y= v_i))+
   geom_line(size = 0.9) +
   facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
   labs(x = "Time (s)", y = "Drawing Velocity (Pixels/s)") + 
-  theme_bw() 
+  theme_bw()+Nice.Label 
 
 
 ```
@@ -237,14 +306,25 @@ ms_data.av <- ms_data3 %>%
 
 #### Power Spectral Density using Welsh periodogram with a Hamming window
 ## Maximum PSD and dominant i.e., frequency corresponding to max(PSD)--see Creagh et. al, 2020
+
+## function to calculate PSD with hamming window of length = length(velocity vector)
+pwelch_func <- function(vector){
+  result = pwelch(vector, window = hamming(length(vector)), plot = FALSE)
+  freq = result$freq
+  spec = result$spec
+  return(list(freq=freq,spec=spec))
+}
+  
+  
 ms_data.psd <- ms_data3 %>% 
    group_by(patient_id,ntest_date,difficulty_level) %>%
-  summarise(v_psd.max = max(pwelch(v_i)$spec), 
-            v_df = pwelch(v_i)$freq[which.max(pwelch(v_i)$spec)],
-            rv_psd.max = max(pwelch(rv_i)$spec),
-            rv_df = pwelch(rv_i)$freq[which.max(pwelch(rv_i)$spec)],
-            av_psd.max = max(pwelch(av_i)$spec),
-            av_df = pwelch(av_i)$freq[which.max(pwelch(av_i)$spec)])
+  summarise(v_psd.max = max(pwelch_func(v_i)$spec), 
+            v_df = pwelch_func(v_i)$freq[which.max(pwelch_func(v_i)$spec)],
+            rv_psd.max = max(pwelch_func(rv_i)$spec),
+            rv_df = pwelch_func(rv_i)$freq[which.max(pwelch_func(rv_i)$spec)],
+            av_psd.max = max(pwelch_func(av_i)$spec),
+            av_df = pwelch_func(av_i)$freq[which.max(pwelch_func(av_i)$spec)])
+
 
 ### Approximate Entropy (ApEn)
 ## Interpolate all v_i, r_vi, av_i over a fixed length L = 500 (see similar approach in Creagh et al., 2020) and calculate their entropy 
@@ -253,11 +333,79 @@ ms_data.apen <- ms_data3 %>%
   summarise(v_apen = ApEn(spline(v_i, n = 500)$y), 
             rv_apen = ApEn(spline(rv_i, n = 500)$y), 
             av_apen = ApEn(spline(av_i, n = 500)$y))
+
+
+p1.apen <- subset(ms_data.apen, patient_id=="rep029")
+p1.apen <- p1.apen %>% select(patient_id, difficulty_level, v_apen)
   
+
+ggplot(df2, aes(x=difficulty_level, y=v_apen)) + 
+    geom_line(size  = 0.9) +
+    geom_point(size  = 2.0)+
+  labs(x = "Difficulty Levels", y = "Approximate Entory of v") +
+    geom_errorbar(aes(ymin=v_apen-sd, ymax=v_apen+sd), width=.2, size = 0.9,
+                  position=position_dodge(0.05))+ theme_bw() + Nice.Label
+
 ```
 
 
 
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+DifficultyToNumberOfTurns <- function(difficulty){
+  if(difficulty=="3"){
+    return(5)
+  } else if (difficulty == "2"){
+    return(3)
+  } else {
+    return(2)
+  }
+}
+
+
+DifficultyToLineWidth <- function(difficulty){
+  if(difficulty=="1"){
+    return(6/32)
+  } else if (difficulty == "2"){
+    return(5/32)
+  } else {
+    return(4/32)
+  }
+}
+
+
+
+GenerateSpiral = function(side, difficulty){
+  
+  NumberOfTurns <- DifficultyToNumberOfTurns(difficulty)
+  MaxAngleRadians <- 2*pi*NumberOfTurns
+  MaxRadius <- 1.25
+  AngleToRadiusScale <- MaxRadius/MaxAngleRadians
+  AngleOffset <- pi/2
+  InvertFactor <- ifelse(side=="Left",1,-1)
+  
+  CurAngleRadian <- 0
+  x_vec <- vector()
+  y_vec <- vector()
+  
+  while (CurAngleRadian < MaxAngleRadians) {
+    x <- CurAngleRadian*AngleToRadiusScale*cos((CurAngleRadian * InvertFactor) + AngleOffset)
+    y <- CurAngleRadian*AngleToRadiusScale*sin((CurAngleRadian * InvertFactor) + AngleOffset)
+    
+    x_vec <- append(x_vec,x)
+    y_vec <- append(y_vec,y)
+    CurAngleRadian = CurAngleRadian + 0.1
+  }
+  
+  linewidth <- rep(DifficultyToLineWidth(difficulty), length(x_vec))
+  
+  return(list(x=x_vec, y=y_vec, linewidth = linewidth))
+}
+
+```
 
 
 
