@@ -61,7 +61,7 @@ ms_data$age <- as.numeric(as.character(ms_data$age))
 ms_data2 <- ms_data %>% 
   group_by(patientID, difficulty) %>%
   mutate(ntest_date = factor(testdate, labels = 1:length(unique(testdate)))) %>% 
-  dplyr::select(trialID, patientID,x,y,t,p,ntest_date,difficulty,age, testdate) %>% 
+  dplyr::select(trialID, patientID,x,y,t,p,ntest_date,difficulty,age, testdate, appendage) %>% 
   dplyr::rename(trial_id = trialID, patient_id=patientID,difficulty_level=difficulty)
 
   
@@ -160,73 +160,73 @@ where $\theta = tan^{-1}\left(\frac{y}{x}\right)$. $x$ and $y$ in each formula a
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
-## Calculate velocity (v), radial velocity (rv), angular velocity (av) by patients, test date, and difficulty level
-## Initialize velocity (v), radial velocity (rv), angular velocity (rhov)
-ms_data3[,"d_t"] <- 0 ## intialize an empty 0 column of delta time
-ms_data3[,"v_i"] <- 0 ## intialize an empty 0 column of velocities
-ms_data3[,"rv_i"] <- 0 ## intialize an empty 0 column of radial velocities
-ms_data3[,"av_i"] <- 0 ## intialize an empty 0 column of angular velocities
-
-# create an empty dataframe to be used later
-new.tr.level <- ms_data3[0,]
-
-## factor levels of patient ID
-p.id <- levels(factor(ms_data3$patient_id))
-
-ptm <- proc.time() ## Check how long it will run (will take 2h 9 min to run)
-
-for (id in p.id) {
-  patient_data <- subset(ms_data3, patient_id==id) ## select a single patient
-  n.test <- levels(factor(patient_data$ntest_date))
-  for (tn in n.test) {
-    test_date <- subset(patient_data, ntest_date==tn) ## select one test date
-    d.levels <- levels(factor(test_date$difficulty_level))
-    for (dl in d.levels) {
-      d.level <- subset(test_date, difficulty_level==dl) ## select difficulty level
-      tr.levels <- levels(factor(d.level$trial_id))
-      for (tr in tr.levels){
-        tr.level <- subset(d.level, trial_id==tr) ## select trial_id
-        dim_tr.level1 <- dim(tr.level)[1] ## Make sure the dimension of each trial > 2
-        if (dim_tr.level1>2){
-          for (i in 1:(dim_tr.level1 - 1)) {
-            tr.level[i+1,"d_t"] <- (tr.level$time[i+1]-tr.level$time[i]) # delta time
-            tr.level[i+1,"v_i"] <- sqrt((tr.level$x[i+1] - tr.level$x[i])^2 +
-                                          (tr.level$y[i+1] - tr.level$y[i])^2
-            )/(tr.level$time[i+1]-tr.level$time[i]) # velocity
-            tr.level[i+1,"rv_i"] <- (sqrt((tr.level$x[i+1])^2 + (tr.level$y[i+1])^2) -                                       sqrt((tr.level$x[i])^2 + (tr.level$y[i])^2)
-            )/(tr.level$time[i+1]-tr.level$time[i]) # radial velocity
-            tr.level[i+1,"av_i"] <- (atan(tr.level$y[i+1]/tr.level$x[i+1]) -
-                                       atan(tr.level$y[i]/tr.level$x[i])
-            )/(tr.level$time[i+1]-tr.level$time[i]) # angular velocity
-            
-          }
-          new.tr.level <- rbind(new.tr.level, tr.level) ## append the data
-        }
-      }
-    }
-  }
-}
-proc.time() - ptm
-
-# ## call the final data, ms_data3
-ms_data4 <- new.tr.level
+# ## Calculate velocity (v), radial velocity (rv), angular velocity (av) by patients, test date, and difficulty level
+# ## Initialize velocity (v), radial velocity (rv), angular velocity (rhov)
+# ms_data3[,"d_t"] <- 0 ## intialize an empty 0 column of delta time
+# ms_data3[,"v_i"] <- 0 ## intialize an empty 0 column of velocities
+# ms_data3[,"rv_i"] <- 0 ## intialize an empty 0 column of radial velocities
+# ms_data3[,"av_i"] <- 0 ## intialize an empty 0 column of angular velocities
+# 
+# # create an empty dataframe to be used later
+# new.tr.level <- ms_data3[0,]
+# 
+# ## factor levels of patient ID
+# p.id <- levels(factor(ms_data3$patient_id))
+# 
+# ptm <- proc.time() ## Check how long it will run (will take 53 min to run)
+# 
+# for (id in p.id) {
+#   patient_data <- subset(ms_data3, patient_id==id) ## select a single patient
+#   n.test <- levels(factor(patient_data$ntest_date))
+#   for (tn in n.test) {
+#     test_date <- subset(patient_data, ntest_date==tn) ## select one test date
+#     d.levels <- levels(factor(test_date$difficulty_level))
+#     for (dl in d.levels) {
+#       d.level <- subset(test_date, difficulty_level==dl) ## select difficulty level
+#       tr.levels <- levels(factor(d.level$trial_id))
+#       for (tr in tr.levels){
+#         tr.level <- subset(d.level, trial_id==tr) ## select trial_id
+#         dim_tr.level1 <- dim(tr.level)[1] ## Make sure the dimension of each trial > 2
+#         if (dim_tr.level1>2){
+#           for (i in 1:(dim_tr.level1 - 1)) {
+#             tr.level[i+1,"d_t"] <- (tr.level$time[i+1]-tr.level$time[i]) # delta time
+#             tr.level[i+1,"v_i"] <- sqrt((tr.level$x[i+1] - tr.level$x[i])^2 +
+#                                           (tr.level$y[i+1] - tr.level$y[i])^2
+#             )/(tr.level$time[i+1]-tr.level$time[i]) # velocity
+#             tr.level[i+1,"rv_i"] <- (sqrt((tr.level$x[i+1])^2 + (tr.level$y[i+1])^2) -                                       sqrt((tr.level$x[i])^2 + (tr.level$y[i])^2)
+#             )/(tr.level$time[i+1]-tr.level$time[i]) # radial velocity
+#             tr.level[i+1,"av_i"] <- (atan(tr.level$y[i+1]/tr.level$x[i+1]) -
+#                                        atan(tr.level$y[i]/tr.level$x[i])
+#             )/(tr.level$time[i+1]-tr.level$time[i]) # angular velocity
+# 
+#           }
+#           new.tr.level <- rbind(new.tr.level, tr.level) ## append the data
+#         }
+#       }
+#     }
+#   }
+# }
+# proc.time() - ptm
+# 
+# # ## call the final data, ms_data4
+# ms_data4 <- new.tr.level
 
 ## The code to calculate v, rv, and av take long so the data was saved to be used later
-ms_data4 <- read.xlsx("new_spiralLH.xlsx", colNames = TRUE)
+ms_data4 <- read.csv("new_spiralLH.csv", header = TRUE)
 
 
-# ## Write the ms_data3 containing vi, rvi, and avi to the file to be used later
-# #write.xlsx(ms_data3,file = "new_spiralLH.xlsx", colNames = TRUE)
+# ## Write the ms_data4 containing vi, rvi, and avi to the file to be used later
+# #write.csv(ms_data4,file = "new_spiralLH.csv")
 # 
 # # #### Tryout for a single patient
 # # 
 # ms_data3p <- subset(ms_data3, v_i>0)
 
-## 
-p1 <- subset(ms_data3, patient_id=="NIB112") ## select single patient ##NDS668, NDS670
-p11 <- subset(p1, ntest_date=="1") ## select one test date 
-p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level 
-p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## select one trial_id
+# ## 
+# p1 <- subset(ms_data3, patient_id=="NIB112") ## select single patient ##NDS668, NDS670
+# p11 <- subset(p1, ntest_date=="1") ## select one test date 
+# p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level 
+# p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## select one trial_id
 #
 # ### filter the speed fequency by 8 Hz
 # bf <- butter(3, 0.08) # 8 Hz low-pass filter
@@ -236,50 +236,127 @@ p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## select one trial_id
 # plot(t, x, type = "l")
 # lines(t, z, col = "red")
 #
+# # #
+# d.t = rep(0, dim(p1111)[1]) ## initialize delta time
+# p1111_v = rep(0, dim(p1111)[1]) ## initialize the velocity of p111
+# p1111_rv = rep(0, dim(p1111)[1]) ## initialize the radial velocity
+# p1111_av = rep(0, dim(p1111)[1]) ## initialize the angular velocity
 # #
-d.t = rep(0, dim(p1111)[1]) ## initialize delta time
-p1111_v = rep(0, dim(p1111)[1]) ## initialize the velocity of p111
-p1111_rv = rep(0, dim(p1111)[1]) ## initialize the radial velocity
-p1111_av = rep(0, dim(p1111)[1]) ## initialize the angular velocity
-#
-for (i in 1:(dim(p1111)[1]-1)){
-  d.t[i+1] = (p1111$time[i+1]-p1111$time[i])
-  p1111_v[i+1] <- sqrt((p1111$x[i+1] - p1111$x[i])^2 + (p1111$y[i+1] - p1111$y[i])^2)/(p1111$time[i+1]-p1111$time[i])
-  p1111_rv[i+1] <-  (sqrt((p1111$x[i+1])^2 + (p1111$y[i+1])^2) - sqrt((p1111$x[i])^2 + (p1111$y[i])^2))/(p1111$time[i+1]-p1111$time[i])
-  p1111_av[i+1] <-  (atan(p1111$y[i+1]/p1111$x[i+1]) - atan(p1111$y[i]/p1111$x[i]))/(p1111$time[i+1]-p1111$time[i])
-}
+# for (i in 1:(dim(p1111)[1]-1)){
+#   d.t[i+1] = (p1111$time[i+1]-p1111$time[i])
+#   p1111_v[i+1] <- sqrt((p1111$x[i+1] - p1111$x[i])^2 + (p1111$y[i+1] - p1111$y[i])^2)/(p1111$time[i+1]-p1111$time[i])
+#   p1111_rv[i+1] <-  (sqrt((p1111$x[i+1])^2 + (p1111$y[i+1])^2) - sqrt((p1111$x[i])^2 + (p1111$y[i])^2))/(p1111$time[i+1]-p1111$time[i])
+#   p1111_av[i+1] <-  (atan(p1111$y[i+1]/p1111$x[i+1]) - atan(p1111$y[i]/p1111$x[i]))/(p1111$time[i+1]-p1111$time[i])
+# }
 # # # 
 # # p111_rv.dwt <- dwt(p111_rv, filter = "d10")
 # # cp111_rv.dwt <- p111_rv.dwt@filter@h ## Coefficient
 ```
 
 
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+#### Recreate the original spiral drawing from the App
+
+## Turn Difficulty level into Number of Turns
+DifficultyToNumberOfTurns <- function(difficulty){
+  if(difficulty=="3"){
+    return(5)
+  } else if (difficulty == "2"){
+    return(3)
+  } else {
+    return(2)
+  }
+}
+
+## Turn difficulty level into the Line width
+DifficultyToLineWidth <- function(difficulty){
+  if(difficulty=="1"){
+    return(6/32)
+  } else if (difficulty == "2"){
+    return(5/32)
+  } else {
+    return(4/32)
+  }
+}
+
+
+## Function to generate the spiral data
+GenerateSpiral = function(side, difficulty){
+  ## side can either be LH or RH from the appendage in ms_data
+  ## difficulty is the dificulty level from 1,2 or 3
+  
+  NumberOfTurns <- DifficultyToNumberOfTurns(difficulty)
+  MaxAngleRadians <- 2*pi*NumberOfTurns
+  MaxRadius <- 1.25
+  AngleToRadiusScale <- MaxRadius/MaxAngleRadians
+  AngleOffset <- pi/2
+  InvertFactor <- ifelse(side=="LH",1,-1)
+  
+  CurAngleRadian <- 0
+  x_vec <- vector() ## Initialize the x vector
+  y_vec <- vector() ## initialize the y vector
+  
+  while (CurAngleRadian < MaxAngleRadians) {
+    x <- CurAngleRadian*AngleToRadiusScale*cos((CurAngleRadian * InvertFactor) + AngleOffset)
+    y <- CurAngleRadian*AngleToRadiusScale*sin((CurAngleRadian * InvertFactor) + AngleOffset)
+    
+    x_vec <- append(x_vec,x)
+    y_vec <- append(y_vec,y)
+    CurAngleRadian = CurAngleRadian + 0.1
+  }
+  
+  linewidth <- rep(DifficultyToLineWidth(difficulty), length(x_vec))
+  
+  return(list(x=x_vec, y=y_vec, linewidth = linewidth))
+}
+
+## generate leeft handed spiral with difficulty 1, 2, and 3
+spiral_dl1.LH <- as.data.frame(GenerateSpiral("LH",1))
+spiral_dl1.LH$difficulty_level = rep("Difficulty Level 1", dim(spiral_dl1.LH)[1])
+spiral_dl2.LH <- as.data.frame(GenerateSpiral("LH",2))
+spiral_dl2.LH$difficulty_level = rep("Difficulty Level 2", dim(spiral_dl2.LH)[1])
+spiral_dl3.LH <- as.data.frame(GenerateSpiral("LH",3))
+spiral_dl3.LH$difficulty_level = rep("Difficulty Level 3", dim(spiral_dl3.LH)[1])
+
+spiral_LH <- rbind(spiral_dl1.LH, spiral_dl2.LH, spiral_dl3.LH)
+```
+
+
+
+
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
 
 
 ##### Plot some of the data
-p1 <- subset(ms_data3, patient_id=="rep029") ## select single patient (rep067)
+p1 <- subset(ms_data4, patient_id=="NIB112") ## select single patient ##NDS668, NDS670
 p1$difficulty_level <- factor(p1$difficulty_level, 
                               labels = c("Difficulty Level 1","Difficulty Level 2",
                                                               "Difficulty Level 3"))
 p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
-p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
+p111 <- subset(p11, difficulty_level=="Difficulty Level 1") ## select single difficulty level (1)
+p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## select one trial_id
 
 ## select only one trial_id
 p11_sub <- p11 %>% 
   group_by(difficulty_level) %>% 
-  dplyr::filter(trial_id==levels(factor(trial_id))[2])
+  dplyr::filter(trial_id==levels(factor(trial_id))[1])
 
 ### raw drawing
-ggplot(p11_sub, aes(x=x, y= y))+
-  geom_point(size  = 2)+
-  geom_path(size = .9, lineend = "round", orientation = t) +
+ggplot()+
+  geom_point(data = p11_sub, aes(x=x, y= y), size  = 2)+ ## cohort spiral
+  geom_path(data = p11_sub, aes(x=x, y= y), size = .9) +
+  geom_point(data = spiral_LH, aes(x=x, y= y), size  = 2, color = "orange")+ ## app spiral
+  geom_path(data = spiral_LH, aes(x=x, y= y), size = .9, color = "orange") +
   facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
   labs(x = "X-Coordinates", y = "Y-Coordinates") + 
   theme_bw() + Nice.Label
 
 ### velocity vs. pixels
-ggplot(p11, aes(x=pixel, y= v_i))+
+ggplot(p11_sub, aes(x=pixel, y= v_i))+
   geom_point(size  = 2.0)+
   geom_line(size = 0.9) +
   facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
@@ -287,7 +364,7 @@ ggplot(p11, aes(x=pixel, y= v_i))+
   theme_bw() 
 
 ### velocity vs. time
-ggplot(p11, aes(x=time, y= v_i))+
+ggplot(p11_sub, aes(x=time, y= v_i))+
   geom_point(size  = 2.0)+
   geom_line(size = 0.9) +
   facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
@@ -366,62 +443,6 @@ ggplot(df2, aes(x=difficulty_level, y=v_apen)) +
 
 
 
-
-
-
-```{r  message=FALSE, warning=FALSE, include=FALSE}
-
-DifficultyToNumberOfTurns <- function(difficulty){
-  if(difficulty=="3"){
-    return(5)
-  } else if (difficulty == "2"){
-    return(3)
-  } else {
-    return(2)
-  }
-}
-
-
-DifficultyToLineWidth <- function(difficulty){
-  if(difficulty=="1"){
-    return(6/32)
-  } else if (difficulty == "2"){
-    return(5/32)
-  } else {
-    return(4/32)
-  }
-}
-
-
-
-GenerateSpiral = function(side, difficulty){
-  
-  NumberOfTurns <- DifficultyToNumberOfTurns(difficulty)
-  MaxAngleRadians <- 2*pi*NumberOfTurns
-  MaxRadius <- 1.25
-  AngleToRadiusScale <- MaxRadius/MaxAngleRadians
-  AngleOffset <- pi/2
-  InvertFactor <- ifelse(side=="Left",1,-1)
-  
-  CurAngleRadian <- 0
-  x_vec <- vector()
-  y_vec <- vector()
-  
-  while (CurAngleRadian < MaxAngleRadians) {
-    x <- CurAngleRadian*AngleToRadiusScale*cos((CurAngleRadian * InvertFactor) + AngleOffset)
-    y <- CurAngleRadian*AngleToRadiusScale*sin((CurAngleRadian * InvertFactor) + AngleOffset)
-    
-    x_vec <- append(x_vec,x)
-    y_vec <- append(y_vec,y)
-    CurAngleRadian = CurAngleRadian + 0.1
-  }
-  
-  linewidth <- rep(DifficultyToLineWidth(difficulty), length(x_vec))
-  
-  return(list(x=x_vec, y=y_vec, linewidth = linewidth))
-}
-
-```
 
 
 
