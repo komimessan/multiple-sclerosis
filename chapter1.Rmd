@@ -314,7 +314,7 @@ GenerateSpiral = function(side, difficulty){
   return(list(x=x_vec, y=y_vec, linewidth = linewidth))
 }
 
-## generate leeft handed spiral with difficulty 1, 2, and 3
+## generate spiral with difficulty 1, 2, and 3
 spiral_dl1.LH <- as.data.frame(GenerateSpiral("LH",1))
 spiral_dl1.LH$difficulty_level = rep("Difficulty Level 1", dim(spiral_dl1.LH)[1])
 spiral_dl2.LH <- as.data.frame(GenerateSpiral("LH",2))
@@ -330,14 +330,37 @@ spiral_LH <- rbind(spiral_dl1.LH, spiral_dl2.LH, spiral_dl3.LH)
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
 
+## Create a function that will use Fourier Transform to lowpass filter the data
+filter_func <- function(x, t, fc){
+  ## x is the vector array that need to be filter
+  ## t the time component of the vector array
+  ## cf is the cut off frequency
+  
+  ## fs (sampling frequency)= no of samples/ sampling time (max time)
+  fs <- length(x)/max(t)   # sampling frequency
+  ns <- length(x)  # number of samples
+  s <- ts(x, frequency = fs) ## convert sample to ts object with sampling rate as fs
+  ft <- fft(s) ## fourier transform
+  lft <- length(ft) ## length of fourier transform
+  bin <- ns/(fs/fc) ## Create the upper bin cut-off point
+  ft[-c(1:bin, (lft-bin):lft)] <- 0 ## Null the upper bins
+  
+  x_lowpass.f <- Re(fft(ft, inv=TRUE))/lft ## lowe pass filter
+  return(x_lowpass.f)
+}
+
 
 ##### Plot some of the data
-p1 <- subset(ms_data4, patient_id=="NIB112") ## select single patient ##NDS668, NDS670
+### NIB446 == HV, difficulty hands direction: LH, LH, LH
+### NIB632 == MS, difficulty hands direction: RH, LH, RH
+### NDS670 == Others, difficulty hands direction: LH, LH, LH
+
+p1 <- subset(ms_data4, patient_id=="NIB446") ## select single patient ## NIB112 ##NDS668, NDS670
 p1$difficulty_level <- factor(p1$difficulty_level, 
                               labels = c("Difficulty Level 1","Difficulty Level 2",
                                                               "Difficulty Level 3"))
 p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
-p111 <- subset(p11, difficulty_level=="Difficulty Level 1") ## select single difficulty level (1)
+p111 <- subset(p11, difficulty_level=="Difficulty Level 3") ## select single difficulty level (1)
 p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## select one trial_id
 
 ## select only one trial_id
@@ -355,16 +378,8 @@ ggplot()+
   labs(x = "X-Coordinates", y = "Y-Coordinates") + 
   theme_bw() + Nice.Label
 
-### velocity vs. pixels
-ggplot(p11_sub, aes(x=pixel, y= v_i))+
-  geom_point(size  = 2.0)+
-  geom_line(size = 0.9) +
-  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
-  labs(x = "Pixels", y = "Drawing Velocity (Pixels/s)") + 
-  theme_bw() 
-
 ### velocity vs. time
-ggplot(p11_sub, aes(x=time, y= v_i))+
+ggplot(p11_sub, aes(x=time, y= filter_func(v_i,time,8)))+
   geom_point(size  = 2.0)+
   geom_line(size = 0.9) +
   facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
@@ -438,6 +453,31 @@ ggplot(df2, aes(x=difficulty_level, y=v_apen)) +
   labs(x = "Difficulty Levels", y = "Approximate Entory of v") +
     geom_errorbar(aes(ymin=v_apen-sd, ymax=v_apen+sd), width=.2, size = 0.9,
                   position=position_dodge(0.05))+ theme_bw() + Nice.Label
+
+
+###
+
+
+### "NIB657"    "NIB659"    "NIB661"    "NIB662"    "NIB663"    "NIB664"    "PATIENT10" 
+##"NDS688"    "NDS689"    "NDS690"    "NDS691"    "NDS692"    "NDS693"    "NDS694"    "NDS696"
+p1 <- subset(ms_data4, patient_id=="NIB664") ## select single patient ## NIB112 ##NDS668
+p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
+p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
+p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## select one trial_id
+##
+
+t <- p1111$time
+x <- p1111$v_i
+z <- filter_func(x, t, 8) # apply filter
+## fs (sampling frequency)= no of samples/ sampling time (max time)
+## The highest frequency  is assumed to be fs/2
+
+pz <- pwelch_func(z) 
+
+plot(pz$freq,pz$spec, 'o')
+
+plot(t,x,'o')
+lines(t,z,col="orange")
 
 ```
 
