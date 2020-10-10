@@ -355,7 +355,7 @@ filter_func <- function(x, t, fc){
 ### NIB632 == MS, difficulty hands direction: RH, LH, RH
 ### NDS670 == Others, difficulty hands direction: LH, LH, LH
 
-p1 <- subset(ms_data4, patient_id=="NIB446") ## select single patient ## NIB112 ##NDS668, NDS670
+p1 <- subset(ms_data4, patient_id=="NDS670") ## select single patient ## NIB112 ##NDS668, NDS670
 p1$difficulty_level <- factor(p1$difficulty_level, 
                               labels = c("Difficulty Level 1","Difficulty Level 2",
                                                               "Difficulty Level 3"))
@@ -370,10 +370,10 @@ p11_sub <- p11 %>%
 
 ### raw drawing
 ggplot()+
-  geom_point(data = p11_sub, aes(x=x, y= y), size  = 2)+ ## cohort spiral
-  geom_path(data = p11_sub, aes(x=x, y= y), size = .9) +
   geom_point(data = spiral_LH, aes(x=x, y= y), size  = 2, color = "orange")+ ## app spiral
   geom_path(data = spiral_LH, aes(x=x, y= y), size = .9, color = "orange") +
+  geom_point(data = p11_sub, aes(x=x, y= y), size  = 2)+ ## cohort spiral
+  geom_path(data = p11_sub, aes(x=x, y= y), size = .9) +
   facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
   labs(x = "X-Coordinates", y = "Y-Coordinates") + 
   theme_bw() + Nice.Label
@@ -420,7 +420,7 @@ pwelch_func <- function(vector){
   result = pwelch(vector, window = hamming(length(vector)), plot = FALSE)
   freq = result$freq
   spec = result$spec
-  return(list(freq=freq,spec=spec))
+  return(as.data.frame(list(freq=freq,spec=spec)))
 }
   
   
@@ -432,6 +432,29 @@ ms_data.psd <- ms_data3 %>%
             rv_df = pwelch_func(rv_i)$freq[which.max(pwelch_func(rv_i)$spec)],
             av_psd.max = max(pwelch_func(av_i)$spec),
             av_df = pwelch_func(av_i)$freq[which.max(pwelch_func(av_i)$spec)])
+
+### Power vs. frequency plot
+## Create the data frame by filtering and calculating the power
+
+p11_sub1 <- subset(p11_sub, difficulty_level == "Difficulty Level 1")
+p11_sub2 <- subset(p11_sub, difficulty_level == "Difficulty Level 2")
+p11_sub3 <- subset(p11_sub, difficulty_level == "Difficulty Level 3")
+
+psd_df1 <- data.frame(difficulty_level = "Difficulty Level 1",
+                      pwelch_func(filter_func(p11_sub1$v_i, p11_sub1$time, 8)))
+psd_df2 <- data.frame(difficulty_level = "Difficulty Level 2",
+                      pwelch_func(filter_func(p11_sub2$v_i, p11_sub2$time, 8)))
+psd_df3 <- data.frame(difficulty_level = "Difficulty Level 3",
+                      pwelch_func(filter_func(p11_sub3$v_i, p11_sub3$time, 8)))
+
+psd_df <- rbind(psd_df1,psd_df2,psd_df3) ## row bind psd for all difficulty levels
+
+ggplot(psd_df, aes(x =freq,spec))+
+  geom_point(size  = 2.0)+
+  geom_line(size = 0.9) +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Frequency (Hz)", y = expression("Power (Pixels/s) "^2)) + 
+  theme_bw()+Nice.Label 
 
 
 ### Approximate Entropy (ApEn)
@@ -460,7 +483,7 @@ ggplot(df2, aes(x=difficulty_level, y=v_apen)) +
 
 ### "NIB657"    "NIB659"    "NIB661"    "NIB662"    "NIB663"    "NIB664"    "PATIENT10" 
 ##"NDS688"    "NDS689"    "NDS690"    "NDS691"    "NDS692"    "NDS693"    "NDS694"    "NDS696"
-p1 <- subset(ms_data4, patient_id=="NIB664") ## select single patient ## NIB112 ##NDS668
+p1 <- subset(ms_data4, patient_id=="NIB446") ## select single patient ## NIB112 ##NDS668
 p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
 p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
 p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## select one trial_id
