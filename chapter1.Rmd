@@ -315,14 +315,15 @@ GenerateSpiral = function(side, difficulty){
 }
 
 ## generate spiral with difficulty 1, 2, and 3
-spiral_dl1.LH <- as.data.frame(GenerateSpiral("LH",1))
+spiral_dl1.LH <- as.data.frame(GenerateSpiral("RH",1))
 spiral_dl1.LH$difficulty_level = rep("Difficulty Level 1", dim(spiral_dl1.LH)[1])
 spiral_dl2.LH <- as.data.frame(GenerateSpiral("LH",2))
 spiral_dl2.LH$difficulty_level = rep("Difficulty Level 2", dim(spiral_dl2.LH)[1])
-spiral_dl3.LH <- as.data.frame(GenerateSpiral("LH",3))
+spiral_dl3.LH <- as.data.frame(GenerateSpiral("RH",3))
 spiral_dl3.LH$difficulty_level = rep("Difficulty Level 3", dim(spiral_dl3.LH)[1])
 
 spiral_LH <- rbind(spiral_dl1.LH, spiral_dl2.LH, spiral_dl3.LH)
+linewidth <- spiral_LH$linewidth
 ```
 
 
@@ -360,7 +361,7 @@ filter_func <- function(x, t, fc){
 ### NIB632 == MS, difficulty hands direction: RH, LH, RH
 ### NDS670 == Others, difficulty hands direction: LH, LH, LH
 
-p1 <- subset(ms_data4, patient_id=="NDS670") ## select single patient ## NIB112 ##NDS668, NDS670
+p1 <- subset(ms_data4, patient_id=="NDS676") ## select single patient ## NIB112 
 p1$difficulty_level <- factor(p1$difficulty_level, 
                               labels = c("Difficulty Level 1","Difficulty Level 2",
                                                               "Difficulty Level 3"))
@@ -374,9 +375,10 @@ p11_sub <- p11 %>%
   dplyr::filter(trial_id==levels(factor(trial_id))[1])
 
 ### raw drawing
+##  lwd=1 is equal to 1/96 inch, which is exactly as 0.75 * 1/72 inch (0.75pt)
 ggplot()+
-  geom_point(data = spiral_LH, aes(x=x, y= y), size  = 2, color = "orange")+ ## app spiral
-  geom_path(data = spiral_LH, aes(x=x, y= y), size = .9, color = "orange") +
+  #geom_point(data = spiral_LH, aes(x=x, y= y), size  = 2, color = "orange")+ ## app spiral
+  geom_path(data = spiral_LH, aes(x=x, y= y), lwd = (linewidth*96)/3, color = "orange") +
   geom_point(data = p11_sub, aes(x=x, y= y), size  = 2)+ ## cohort spiral
   geom_path(data = p11_sub, aes(x=x, y= y), size = .9) +
   facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
@@ -516,8 +518,11 @@ ggplot(p1.apen.sum, aes(x=difficulty_level, y=v_apen)) +
 p1 <- subset(ms_data4, patient_id=="NIB205") ## select single patient ## NIB112 ##NDS668
 p11 <- subset(p1, ntest_date=="36") ## select one test date (1)
 p111 <- subset(p11, difficulty_level=="2") ## select single difficulty level (1)
-p1111 <- subset(p111, trial_id == "JSpymPxwdnXwvLzXpjym") ## p111$trial_id[1] ## select one trial_id
+p1111 <- subset(p111, trial_id == "inZJofKGHweVTKUO28es") ## "JSpymPxwdnXwvLzXpjym"
 ##
+
+x<- p1111$x - p1111$x[25]
+y<- p1111$y - p1111$y[25]
 
 t <- p1111$time
 x <- p1111$av_i
@@ -531,6 +536,79 @@ plot(pz$freq,pz$spec, 'o')
 
 plot(t,x,'o')
 lines(t,z,col="orange")
+
+```
+
+
+
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE, fig.height=6, fig.width= 10}
+
+library(VennDiagram)
+
+spiraldata1 <- read.csv("spiralDS1.csv", header = TRUE)
+
+Spiral_Vanessa <- ms_data$patientID
+Spiral_Peter <- spiraldata1$metaData.ID
+
+S_vanessa.l <- length(levels(factor(Spiral_Vanessa)))
+S_Peter.l <- length(levels(factor(Spiral_Peter)))
+cross.area <- length(intersect(Spiral_Vanessa,Spiral_Peter))
+diff_Van.Pet <- setdiff(Spiral_Vanessa,Spiral_Peter)
+diff_Pet.Van <- setdiff(Spiral_Peter,Spiral_Vanessa)
+
+grid.newpage();
+venn.plot <- draw.pairwise.venn(area1 = S_vanessa.l, 
+                                area2 = S_Peter.l, 
+                                cross.area = cross.area,
+                                #col = "red",
+                                lty = "blank",
+                                cat.cex = c(1.5,1.5), cex = c(2.5,2.5,2.5),
+                 fill = c("green", "blue"),
+                 category = c("Vanessa Data", "Peter Data"));
+grid.draw(venn.plot)
+
+
+### Splitting the dataset
+#a # original data frame
+
+#train<-sample_frac(a, 0.7)
+#sid<-as.numeric(rownames(train)) # because rownames() returns character
+#test<-a[-sid,]
+
+## euclidean distance
+euc.dist <- function(x2,y2){
+  x1 <- 0
+  y1 <- 0
+  return(sqrt((x1 - x2) ^ 2 + (y1-y2)^2))
+}
+
+ms_dist <- tibble::as_tibble(ms_data4) %>% 
+  group_by(patient_id, ntest_date, difficulty_level, trial_id) %>% 
+  summarise(dist = euc.dist(x,y)) %>% 
+  slice(1)
+
+ms_dist$difficulty_level <- factor(ms_dist$difficulty_level, 
+                                   labels = c("Difficulty Level 1",
+                                              "Difficulty Level 2",
+                                              "Difficulty Level 3") )
+
+
+ggplot(ms_dist, aes(x=dist)) +
+  geom_histogram(color="darkblue", fill="lightblue", bins = 50) +
+  facet_wrap(~difficulty_level, nrow = 1, scales = "free") +
+  labs(x = "Euclidean Distance between (0,0) and First Spiral Point", y = "Count") +
+  theme_bw() + Nice.Label
+
+ms_dist.var <- tibble::as_tibble(ms_dist)  %>% 
+  group_by(patient_id, difficulty_level) %>% 
+  summarise(dist_var = var(dist))
+
+ggplot(ms_dist.var, aes(x=dist_var)) +
+  geom_histogram(color="darkblue", fill="lightblue", bins = 10) +
+  facet_wrap(~difficulty_level, nrow = 1, scales = "free") +
+  labs(x = "Variance of Euclidean Distance by Patient", y = "Count") +
+  theme_bw() + Nice.Label
 
 ```
 
