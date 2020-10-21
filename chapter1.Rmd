@@ -14,6 +14,7 @@ library(psd) ## v. 2.1.0 ## power spectral density -- https://cran.r-project.org
 library(TSEntropies) ## v. 0.9 ## to calculate Approximate Entropies (ApEn)-- https://cran.r-project.org/web/packages/TSEntropies/TSEntropies.pdf
 library(oce) ## v.1.2.0 ## oceanographic library which contain PSD with hamming window
 library(tidyr) ## v. 1.1.0 ## for gather and wide
+library(VennDiagram) ## v. ## Venn diagram 
 ```
 
 
@@ -22,7 +23,7 @@ library(tidyr) ## v. 1.1.0 ## for gather and wide
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 ### Import data
 ## Description of the data is as follow
-# metaData.ID = Subject ID
+# Patient = Subject ID
 # x: distance (in inches) of the spot drawn from the center of the screen
 # y: distance (in inches) of the spot drawn from the center of the screen
 # p: estimated pressure of the tap (based off of surface area)
@@ -30,12 +31,14 @@ library(tidyr) ## v. 1.1.0 ## for gather and wide
 # sumData.Num turns: the number of turns in the spiral 
 # sumData.Line width: the width of the lines of the spiral
 # time.point: UNIX timestamp of the drawing (this time in seconds)
-# metaData.ID: Subject/patient specific ID
 
 
-ms_data <- read.csv("spiralDataCorrected.csv", header = TRUE)
-metadata <- read.xlsx("Handedness.xlsx", colNames = TRUE)
 
+ms_data <- read.csv("spiralDataCorrected.csv", header = TRUE) ## multiple sclerosis
+cl_data <- read.csv("Clinical_Data.csv", header = TRUE) ## clinical
+
+
+#### Clean up the MS data
 ## add a test date to the data 
 ms_data$testdate <- substr(ms_data$testDate,1,10)
 
@@ -55,16 +58,29 @@ ms_data$y <- as.numeric(as.character(ms_data$y))
 ms_data$t <- as.numeric(as.character(ms_data$t))
 ms_data$p <- as.numeric(as.character(ms_data$p))
 ms_data$age <- as.numeric(as.character(ms_data$age))
+ms_data$testdate <- as.Date(ms_data$testdate, format = "%Y-%m-%d")
 
+### Certain patients are incorrect so they are changed
+### NIB380 on 5/22/19 – change the patient code to NIB370 
+### NIB649 on 3/14/19 – change the patient code to NIB640 
+### NIB685 on 12/12/18 – change the patient code to NDS685 
+### NIB703 on 8/21/19 – change the patient code to NDS703 
+
+ms_data[ms_data$patientID =="NIB380" & ms_data$testdate=="2019-05-22",]$patientID <- "NIB370"
+ms_data[ms_data$patientID =="NIB649" & ms_data$testdate=="2019-03-14",]$patientID <- "NIB640"
+ms_data[ms_data$patientID =="NIB685" & ms_data$testdate=="2018-12-12",]$patientID <- "NDS685"
+ms_data[ms_data$patientID =="NIB703" & ms_data$testdate=="2019-08-21",]$patientID <- "NDS703"
+
+## Retrive some of the healthy volunteers that start with PATIENT..
+HV_Patient <- ms_data[substr(ms_data$patientID,1,7)=="PATIENT",]
 
 ## add visit number based on patientID and difficulty level, remove some columns and change column names
 ms_data2 <- ms_data %>% 
   group_by(patientID, difficulty) %>%
   mutate(ntest_date = factor(testdate, labels = 1:length(unique(testdate)))) %>% 
-  dplyr::select(trialID, patientID,x,y,t,p,ntest_date,difficulty,age, testdate, appendage) %>% 
+  dplyr::select(trialID, patientID,x,y,t,p,ntest_date,difficulty, testdate, appendage) %>% 
   dplyr::rename(trial_id = trialID, patient_id=patientID,difficulty_level=difficulty)
 
-  
 ms_data2$t <- ms_data2$t/1000 ## convert time point from milliseconds to seconds 
 
 ## add time that is scaled from 0 by patient_id, ntest_date, and difficulty_level and remove duplicate x, y, t
@@ -74,41 +90,52 @@ ms_data2 <- ms_data2 %>%
   arrange(t) %>% 
   mutate(pixel = row_number(), time = t-t[1])
 
-## Select Patient_id from the main data that are in the Patient code of the metadata
-ms_data2 <- ms_data2 %>% dplyr::filter(patient_id %in% metadata$PatientCode)
 
+####### Clinical data
+#### Add new diagnosis category to the clinical data 
+#### (MS, HV, and Others for all others disorder)
+cl_data$diagnosis_group <- ifelse(
+  cl_data$diagnosis=="PP-MS" | cl_data$diagnosis=="RR-MS" | cl_data$diagnosis=="SP-MS","MS",
+                                   ifelse(cl_data$diagnosis=="Healthy Donor","HV", "Others"))
 
-#### Add new diagnosis category to the metadata (MS, HV, and Others for all others disorder)
-metadata$diagnosis_group <- ifelse(metadata$Diagnosis=="MS","MS",
-                                   ifelse(metadata$Diagnosis=="HV","HV", "Others"))
+## round age to the nearest integer
+cl_data$age <- round(cl_data$age)
 
-## Convert birth dates to date format
-metadata$`Birth.month/year` <- as.Date(metadata$`Birth.month/year`, origin = "1900-01-01")
+## Create clinical data that contain patient that intersect with those in the ms_data
+cl_data.sub <- cl_data %>% 
+  #dplyr::filter(NeurExPatientID %in% ms_data2$patient_id) %>% 
+  dplyr::rename(dominant_hand = handedness, patient_id=NeurExPatientID, 
+                testdate = "AppTestDate", neuro_testdate ="NeurExDate",
+                apptest_to_neurotest = "X..days.between.app.test.and.clinic.visit") 
 
-## Create metadata that contain patient that intersect with those in the ms_data
-metadata_sub <- metadata %>% 
-  dplyr::filter(PatientCode %in% ms_data2$patient_id) %>% 
-  dplyr::rename(dominant_hand = Dominant.Hand, patient_id=PatientCode,
-                birth_date=`Birth.month/year`, gender=Gender, diagnosis=Diagnosis)
+## Change the format of the test dates and check difference between test dates (app and neuro)
+cl_data.sub$testdate <- as.Date(cl_data.sub$testdate, format = "%m/%d/%Y")
+cl_data.sub$neuro_testdate <- as.Date(cl_data.sub$neuro_testdate, format = "%m/%d/%Y")
 
-### Join the metadata to the ms_data2 
-ms_data3 <- merge(ms_data2,metadata_sub, by = "patient_id")
+## patient and testdates in both datasets
+patient_ms_cl <- intersect(ms_data2$patient_id,cl_data.sub$patient_id) 
+testdate_ms_cl <- intersect(ms_data2$testdate,cl_data.sub$testdate) 
 
+## Clinical datasets with patient IDs and testdates in MS datasets
+cl_data.sub2 <- cl_data.sub %>% 
+  dplyr::filter(patient_id %in% patient_ms_cl & testdate %in% testdate_ms_cl) 
 
-## Recalculate the age from their birth date to the testdate
-ms_data3$age <- round(lubridate::time_length(difftime(ms_data3$testdate,
-                                                ms_data3$birth_date),"years"))
+## MS datasets with patient IDs and testdates in clinicla datasets
+ms_data2 <- ms_data2 %>% semi_join(cl_data.sub2, by = c("patient_id","testdate"))
+
+#### Join the cl_data.sub to the ms_data2 
+ms_data3 <- merge(ms_data2, cl_data.sub2, by = c("patient_id", "testdate"), all = TRUE)
+
 ## Arrange ms_data3 by patient_id,ntest_date, difficulty_level, trial_id, and time
-
 ms_data3 <- arrange(ms_data3,patient_id,ntest_date, difficulty_level, trial_id, time)
-  
+
 ```
 
 
 
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
-# create template for plot labelling
+#### create template for plot labelling
 black.bold.text1 <- element_text(face = "bold", color = "black",size=24) # x and y axis
 black.bold.text2 <- element_text(face = "bold", color = "black",size=24) # title
 Nice.Label <-theme(axis.text.x = element_text(face="bold", color="black", size=16),
@@ -118,8 +145,9 @@ Nice.Label <-theme(axis.text.x = element_text(face="bold", color="black", size=1
 
 ### Tranform from long tabel to wide table
 
-metadata_sub.long <- metadata_sub %>% 
-  dplyr::select(patient_id,diagnosis_group,dominant_hand, gender) %>% 
+metadata_sub.long <- ms_data3 %>% 
+  dplyr::distinct(patient_id, .keep_all = TRUE) %>%
+  dplyr::select(patient_id,diagnosis_group,dominant_hand, gender) %>%
   tidyr::gather(group, attribute, diagnosis_group:gender, factor_key = TRUE) 
 
 metadata_sub.long$group <- factor(metadata_sub.long$group,
@@ -129,6 +157,7 @@ metadata_sub.long$group <- factor(metadata_sub.long$group,
 ### Plot the distribution of the type of data we have 
 ggplot(metadata_sub.long, aes(x=attribute)) +
   geom_bar(colour = "gray", width = 0.5) +
+  geom_text(stat='count', aes(label=..count..), vjust=-0.2, size = 6) +
   facet_wrap(~group, scales = "free", nrow = 1) +
   labs(x = " ", y = "Number of Cohorts") +
   theme_bw()+Nice.Label
@@ -173,7 +202,7 @@ where $\theta = tan^{-1}\left(\frac{y}{x}\right)$. $x$ and $y$ in each formula a
 # ## factor levels of patient ID
 # p.id <- levels(factor(ms_data3$patient_id))
 # 
-# ptm <- proc.time() ## Check how long it will run (will take 53 min to run)
+# ptm <- proc.time() ## Check how long it will run (will take 11 min to run)
 # 
 # for (id in p.id) {
 #   patient_data <- subset(ms_data3, patient_id==id) ## select a single patient
@@ -361,12 +390,12 @@ filter_func <- function(x, t, fc){
 ### NIB632 == MS, difficulty hands direction: RH, LH, RH
 ### NDS670 == Others, difficulty hands direction: LH, LH, LH
 
-p1 <- subset(ms_data4, patient_id=="NDS676") ## select single patient ## NIB112 
+p1 <- subset(ms_data4, patient_id=="NIB657") ## select single patient ## NIB112 
 p1$difficulty_level <- factor(p1$difficulty_level, 
                               labels = c("Difficulty Level 1","Difficulty Level 2",
                                                               "Difficulty Level 3"))
 p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
-p111 <- subset(p11, difficulty_level=="Difficulty Level 3") ## select single difficulty level (1)
+p111 <- subset(p11, difficulty_level=="Difficulty Level 2") ## select single difficulty level (1)
 p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## select one trial_id
 
 ## select only one trial_id
@@ -374,19 +403,95 @@ p11_sub <- p11 %>%
   group_by(difficulty_level) %>% 
   dplyr::filter(trial_id==levels(factor(trial_id))[1])
 
+
+spiral_data_func <- function(data, patientID, ntest){
+  ## data is the dataframe
+  ## patientID is the patient Id
+  ## ntest is the nth number of testdate for patient i
+  
+  p1 <- subset(data, patient_id == patientID)
+  p1$difficulty_level <- factor(p1$difficulty_level, 
+                                labels = c("Difficulty Level 1","Difficulty Level 2",
+                                           "Difficulty Level 3"))
+  p11 <- subset(p1, ntest_date==ntest) ## select one test date (1)
+  p11_sub <- p11 %>% 
+    group_by(difficulty_level) %>% 
+    dplyr::filter(trial_id==levels(factor(trial_id))[1]) %>% 
+    dplyr::select(patient_id, testdate, difficulty_level, trial_id, 
+                  ntest_date,time, x, y, v_i, rv_i, av_i, appendage)
+
+  ## generate spiral with difficulty 1, 2, and 3
+  dl1 <- "Difficulty Level 1"
+  dl2 <- "Difficulty Level 2"
+  dl3 <- "Difficulty Level 3"
+  append1 <- subset(p11_sub,difficulty_level == dl1)$appendage[1]
+  append2 <- subset(p11_sub,difficulty_level == dl2)$appendage[1]
+  append3 <- subset(p11_sub,difficulty_level == dl3)$appendage[1]
+  
+  spiral_dl1 <- as.data.frame(GenerateSpiral(append1,1))
+  spiral_dl1$difficulty_level = rep(dl1, dim(spiral_dl1.LH)[1])
+  spiral_dl2 <- as.data.frame(GenerateSpiral(append2,2))
+  spiral_dl2$difficulty_level = rep(dl2, dim(spiral_dl2.LH)[1])
+  spiral_dl3 <- as.data.frame(GenerateSpiral(append3,3))
+  spiral_dl3$difficulty_level = rep(dl3, dim(spiral_dl3.LH)[1])
+  
+  spiral_data <- rbind(spiral_dl1, spiral_dl2, spiral_dl3)
+  colnames(spiral_data) <- c("xt","yt","linewidth","difficulty_level")
+  
+  ## Create the new normnalized x and y coordinates by assuming 
+  ## every first point is correct
+  
+  ## normalization factor
+  norm.x1 <- last(spiral_dl1$x) - subset(p11_sub,difficulty_level == dl1)$x[1]
+  norm.y1 <- last(spiral_dl1$y) - subset(p11_sub,difficulty_level == dl1)$y[1]
+  norm.x2 <- last(spiral_dl2$x) - subset(p11_sub,difficulty_level == dl2)$x[1]
+  norm.y2 <- last(spiral_dl2$y) - subset(p11_sub,difficulty_level == dl2)$y[1]
+  norm.x3 <- last(spiral_dl3$x) - subset(p11_sub,difficulty_level == dl3)$x[1]
+  norm.y3 <- last(spiral_dl3$y) - subset(p11_sub,difficulty_level == dl3)$y[1]
+  
+  ## add x_norm and y_norm
+  p11_sub$x_norm <- ifelse(p11_sub$difficulty_level==dl1, p11_sub$x + norm.x1,
+                           ifelse(p11_sub$difficulty_level==dl2, p11_sub$x + norm.x2,
+                                  p11_sub$x + norm.x3))
+  p11_sub$y_norm <- ifelse(p11_sub$difficulty_level==dl1, p11_sub$y + norm.y1,
+                           ifelse(p11_sub$difficulty_level==dl2, p11_sub$y + norm.y2,
+                                  p11_sub$y + norm.y3))
+  
+  
+  return(list(patient_spiral = p11_sub, true_spiral = spiral_data))
+  #spiral_dat <- merge(p11_sub,spiral_LH, by = "difficulty_level", all = TRUE)
+}
+
+
+## Compute the spiral according to the appendage and extract data for plotting
+spiral_data <- spiral_data_func(ms_data4, "NIB657","1")
+patient_spiral <- as.data.frame(spiral_data$patient_spiral)
+true_spiral <- as.data.frame(spiral_data$true_spiral)
+linewidth <- spiral_data$true_spiral$linewidth
 ### raw drawing
 ##  lwd=1 is equal to 1/96 inch, which is exactly as 0.75 * 1/72 inch (0.75pt)
 ggplot()+
   #geom_point(data = spiral_LH, aes(x=x, y= y), size  = 2, color = "orange")+ ## app spiral
-  geom_path(data = spiral_LH, aes(x=x, y= y), lwd = (linewidth*96)/3, color = "orange") +
-  geom_point(data = p11_sub, aes(x=x, y= y), size  = 2)+ ## cohort spiral
-  geom_path(data = p11_sub, aes(x=x, y= y), size = .9) +
+  geom_path(data = true_spiral, aes(x=xt, y= yt), lwd = (linewidth*96)/3, color = "orange") +
+  geom_point(data = patient_spiral, aes(x=x_norm, y= y_norm), size  = 2)+ ## cohort spiral
+  geom_path(data = patient_spiral, aes(x=x_norm, y= y_norm), size = .9) +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "X-Coordinates", y = "Y-Coordinates") + 
+  theme_bw() + Nice.Label
+
+## spiral normalized drawing
+
+ggplot()+
+  #geom_point(data = spiral_LH, aes(x=x, y= y), size  = 2, color = "orange")+ ## app spiral
+  geom_path(data = true_spiral, aes(x=xt, y= yt), lwd = (linewidth*96)/3, color = "orange") +
+  geom_point(data = patient_spiral, aes(x=x, y= y), size  = 2)+ ## cohort spiral
+  geom_path(data = patient_spiral, aes(x=x, y= y), size = .9) +
   facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
   labs(x = "X-Coordinates", y = "Y-Coordinates") + 
   theme_bw() + Nice.Label
 
 ### velocity vs. time
-ggplot(p11_sub, aes(x=time, y= filter_func(v_i,time,8)))+
+ggplot(patient_spiral, aes(x=time, y= filter_func(v_i,time,8)))+
   geom_point(size  = 2.0)+
   geom_line(size = 0.9) +
   facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
@@ -394,6 +499,10 @@ ggplot(p11_sub, aes(x=time, y= filter_func(v_i,time,8)))+
   theme_bw()+Nice.Label 
 
 
+
+p11_sub2 <- p11_sub %>% 
+  group_by(difficulty_level) %>% 
+  mutate(x = x - first(x), y= y-first(y))
 ```
 
 
