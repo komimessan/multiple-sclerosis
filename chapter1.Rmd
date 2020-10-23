@@ -130,11 +130,11 @@ merge_func <- function(cl_ms, cl_data, ms_data){
   ## cl_data is the entire clinical dataset
   ## ms_data is the MS dataset (i.e. spiral dataset)
 
-  
   ## healthy volunters and other disorders clinical data
   cl_hv_other <- subset(cl_data, diagnosis_group=="HV" | diagnosis_group=="Others")
   
   ## Combine clinical MS patient with other disease and healthy volunteers
+  cl_ms <- cl_ms %>% select(-c(id)) ## remove id column before rbind
   cl_ms_hv_other <- rbind(cl_ms, cl_hv_other)
   
   ## Change the format of the test dates and check difference between test dates (app and neuro)
@@ -165,7 +165,6 @@ merge_func <- function(cl_ms, cl_data, ms_data){
 
 
 ## Create Training set (train = 2/3)
-
 ms_data_train <- merge_func(cl_ms = cl_train, cl_data = cl_data.sub, ms_data = ms_data2)
 
 ## Create test set (test = 1/3)
@@ -293,43 +292,6 @@ where $\theta = tan^{-1}\left(\frac{y}{x}\right)$. $x$ and $y$ in each formula a
 ## The code to calculate v, rv, and av take long so the data was saved to be used later
 ms_data4 <- read.csv("new_spiralLH.csv", header = TRUE)
 
-
-# ## Write the ms_data4 containing vi, rvi, and avi to the file to be used later
-# #write.csv(ms_data4,file = "new_spiralLH.csv")
-# 
-# # #### Tryout for a single patient
-# # 
-# ms_data3p <- subset(ms_data3, v_i>0)
-
-# ## 
-# p1 <- subset(ms_data3, patient_id=="NIB112") ## select single patient ##NDS668, NDS670
-# p11 <- subset(p1, ntest_date=="1") ## select one test date 
-# p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level 
-# p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## select one trial_id
-#
-# ### filter the speed fequency by 8 Hz
-# bf <- butter(3, 0.08) # 8 Hz low-pass filter
-# t <- p111$t - p111$t[1]
-# x <- p111$v_i
-# z <- filter(bf, x) # apply filter
-# plot(t, x, type = "l")
-# lines(t, z, col = "red")
-#
-# # #
-# d.t = rep(0, dim(p1111)[1]) ## initialize delta time
-# p1111_v = rep(0, dim(p1111)[1]) ## initialize the velocity of p111
-# p1111_rv = rep(0, dim(p1111)[1]) ## initialize the radial velocity
-# p1111_av = rep(0, dim(p1111)[1]) ## initialize the angular velocity
-# #
-# for (i in 1:(dim(p1111)[1]-1)){
-#   d.t[i+1] = (p1111$time[i+1]-p1111$time[i])
-#   p1111_v[i+1] <- sqrt((p1111$x[i+1] - p1111$x[i])^2 + (p1111$y[i+1] - p1111$y[i])^2)/(p1111$time[i+1]-p1111$time[i])
-#   p1111_rv[i+1] <-  (sqrt((p1111$x[i+1])^2 + (p1111$y[i+1])^2) - sqrt((p1111$x[i])^2 + (p1111$y[i])^2))/(p1111$time[i+1]-p1111$time[i])
-#   p1111_av[i+1] <-  (atan(p1111$y[i+1]/p1111$x[i+1]) - atan(p1111$y[i]/p1111$x[i]))/(p1111$time[i+1]-p1111$time[i])
-# }
-# # # 
-# # p111_rv.dwt <- dwt(p111_rv, filter = "d10")
-# # cp111_rv.dwt <- p111_rv.dwt@filter@h ## Coefficient
 ```
 
 
@@ -446,13 +408,14 @@ p1$difficulty_level <- factor(p1$difficulty_level,
                                                               "Difficulty Level 3"))
 p11 <- subset(p1, ntest_date=="2") ## select one test date (1)
 p111 <- subset(p11, difficulty_level=="Difficulty Level 3") ## select single difficulty level (1)
-p1111 <- subset(p111, trial_id =="l1tYe4RlsAomFgxdPFDv" ) #p111$trial_id[1]) ## select one trial_id
+p1111 <- subset(p111, trial_id =="l1tYe4RlsAomFgxdPFDv") #p111$trial_id[1]) ## select one trial_id
 
 ## select only one trial_id
 p11_sub <- p11 %>% 
   group_by(difficulty_level) %>% 
   dplyr::filter(trial_id==levels(factor(trial_id))[1])
 
+#### Function to create plotting data
 
 spiral_data_func <- function(data, patientID, ntest){
   ## data is the dataframe
@@ -469,7 +432,7 @@ spiral_data_func <- function(data, patientID, ntest){
     dplyr::filter(trial_id==levels(factor(trial_id))[1]) %>% 
     dplyr::select(patient_id, testdate, difficulty_level, trial_id, 
                   ntest_date,time, x, y, v_i, rv_i, av_i, appendage)
-
+  
   ## generate spiral with difficulty 1, 2, and 3
   dl1 <- "Difficulty Level 1"
   dl2 <- "Difficulty Level 2"
@@ -479,11 +442,11 @@ spiral_data_func <- function(data, patientID, ntest){
   append3 <- subset(p11_sub,difficulty_level == dl3)$appendage[1]
   
   spiral_dl1 <- as.data.frame(GenerateSpiral(append1,1))
-  spiral_dl1$difficulty_level = rep(dl1, dim(spiral_dl1.LH)[1])
+  spiral_dl1$difficulty_level = rep(dl1, dim(spiral_dl1)[1])
   spiral_dl2 <- as.data.frame(GenerateSpiral(append2,2))
-  spiral_dl2$difficulty_level = rep(dl2, dim(spiral_dl2.LH)[1])
+  spiral_dl2$difficulty_level = rep(dl2, dim(spiral_dl2)[1])
   spiral_dl3 <- as.data.frame(GenerateSpiral(append3,3))
-  spiral_dl3$difficulty_level = rep(dl3, dim(spiral_dl3.LH)[1])
+  spiral_dl3$difficulty_level = rep(dl3, dim(spiral_dl3)[1])
   
   spiral_data <- rbind(spiral_dl1, spiral_dl2, spiral_dl3)
   colnames(spiral_data) <- c("xt","yt","linewidth","difficulty_level")
@@ -522,54 +485,57 @@ spiral_data_func <- function(data, patientID, ntest){
   p11_sub$y_norm <- rep(0,n)
   
   ## p11_sub.l1$y[1]>p11_sub.l1$y[n1] implies first y1 larger than yn and thus outward
-  for (j in n){
-    if (p11_sub[j,"difficulty_level"]== dl1 & p11_sub.l1$y[1]>p11_sub.l1$y[n1]){
-      p11_sub$x_norm[j] <- p11_sub$x[j] + norm.xo1
-    } else if (p11_sub[j,"difficulty_level"]== dl1 & p11_sub.l1$y[1]<p11_sub.l1$y[n1]){
-      p11_sub$x_norm[j] <- p11_sub$x[j] + norm.xi1
-    } else if (p11_sub[j,"difficulty_level"]== dl2 & p11_sub.l2$y[1]>p11_sub.l2$y[n2]){
-      p11_sub$x_norm[j] <- p11_sub$x[j] + norm.xo2
-    } else if (p11_sub[j,"difficulty_level"]== dl2 & p11_sub.l2$y[1]<p11_sub.l2$y[n2]){
-      p11_sub$x_norm[j] <- p11_sub$x[j] + norm.xi2
-    } else if (p11_sub[j,"difficulty_level"]== dl3 & p11_sub.l3$y[1]>p11_sub.l3$y[n3]){
-      p11_sub$x_norm[j] <- p11_sub$x[j] + norm.xo3
-    } else if (p11_sub[j,"difficulty_level"]== dl3 & p11_sub.l3$y[1]<p11_sub.l3$y[n3]){
-      p11_sub$x_norm[j] <- p11_sub$x[j] + norm.xi3
+  for (j in 1:n){
+    if (p11_sub[j,"difficulty_level"]== dl1 & (p11_sub.l1$y[1] > p11_sub.l1$y[n1])){
+      p11_sub[j, "x_norm"] <- p11_sub$x[j] + norm.xo1
+      p11_sub[j, "y_norm"] <- p11_sub$y[j] + norm.yo1
+    } else if (p11_sub[j,"difficulty_level"]== dl1 & (p11_sub.l1$y[1] < p11_sub.l1$y[n1])){
+      p11_sub[j, "x_norm"] <- p11_sub$x[j] + norm.xi1
+      p11_sub[j, "y_norm"] <- p11_sub$y[j] + norm.yi1
+    } else if (p11_sub[j,"difficulty_level"]== dl2 & (p11_sub.l2$y[1]>p11_sub.l2$y[n2])){
+      p11_sub[j, "x_norm"] <- p11_sub$x[j] + norm.xo2
+      p11_sub[j, "y_norm"] <- p11_sub$y[j] + norm.yo2
+    } else if (p11_sub[j,"difficulty_level"]== dl2 & (p11_sub.l2$y[1]<p11_sub.l2$y[n2])){
+      p11_sub[j, "x_norm"] <- p11_sub$x[j] + norm.xi2
+      p11_sub[j, "y_norm"] <- p11_sub$y[j] + norm.yi2
+    } else if (p11_sub[j,"difficulty_level"]== dl3 & (p11_sub.l3$y[1]>p11_sub.l3$y[n3])){
+      p11_sub[j, "x_norm"] <- p11_sub$x[j] + norm.xo3
+      p11_sub[j, "y_norm"] <- p11_sub$y[j] + norm.yo3
+    } else if (p11_sub[j,"difficulty_level"]== dl3 & (p11_sub.l3$y[1]<p11_sub.l3$y[n3])){
+      p11_sub[j, "x_norm"] <- p11_sub$x[j] + norm.xi3
+      p11_sub[j, "y_norm"] <- p11_sub$y[j] + norm.yi3
     } else {
-      
+      p11_sub[j, "x_norm"] <- NA
+      p11_sub[j, "y_norm"] <- NA
     }
   }
-  p11_sub$x_norm <- ifelse(p11_sub$difficulty_level==dl1, p11_sub$x + norm.x1,
-                           ifelse(p11_sub$difficulty_level==dl2, p11_sub$x + norm.x2,
-                                  p11_sub$x + norm.x3))
-  p11_sub$y_norm <- ifelse(p11_sub$difficulty_level==dl1, p11_sub$y + norm.y1,
-                           ifelse(p11_sub$difficulty_level==dl2, p11_sub$y + norm.y2,
-                                  p11_sub$y + norm.y3))
+  # p11_sub$x_norm <- ifelse(p11_sub$difficulty_level==dl1, p11_sub$x + norm.x1,
+  #                          ifelse(p11_sub$difficulty_level==dl2, p11_sub$x + norm.x2,
+  #                                 p11_sub$x + norm.x3))
+  # p11_sub$y_norm <- ifelse(p11_sub$difficulty_level==dl1, p11_sub$y + norm.y1,
+  #                          ifelse(p11_sub$difficulty_level==dl2, p11_sub$y + norm.y2,
+  #                                 p11_sub$y + norm.y3))
   
   
   return(list(patient_spiral = p11_sub, true_spiral = spiral_data))
   #spiral_dat <- merge(p11_sub,spiral_LH, by = "difficulty_level", all = TRUE)
 }
 
+```
 
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
 ## Compute the spiral according to the appendage and extract data for plotting
 spiral_data <- spiral_data_func(ms_data4, "NIB657","1")
 patient_spiral <- as.data.frame(spiral_data$patient_spiral)
 true_spiral <- as.data.frame(spiral_data$true_spiral)
 linewidth <- spiral_data$true_spiral$linewidth
-### raw drawing
+
+##### Spiral plots
+## raw drawing
 ##  lwd=1 is equal to 1/96 inch, which is exactly as 0.75 * 1/72 inch (0.75pt)
-ggplot()+
-  #geom_point(data = spiral_LH, aes(x=x, y= y), size  = 2, color = "orange")+ ## app spiral
-  geom_path(data = true_spiral, aes(x=xt, y= yt), lwd = (linewidth*96)/3, color = "orange") +
-  geom_point(data = patient_spiral, aes(x=x_norm, y= y_norm), size  = 2)+ ## cohort spiral
-  geom_path(data = patient_spiral, aes(x=x_norm, y= y_norm), size = .9) +
-  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
-  labs(x = "X-Coordinates", y = "Y-Coordinates") + 
-  theme_bw() + Nice.Label
-
-## spiral normalized drawing
-
 ggplot()+
   #geom_point(data = spiral_LH, aes(x=x, y= y), size  = 2, color = "orange")+ ## app spiral
   geom_path(data = true_spiral, aes(x=xt, y= yt), lwd = (linewidth*96)/3, color = "orange") +
@@ -579,7 +545,19 @@ ggplot()+
   labs(x = "X-Coordinates", y = "Y-Coordinates") + 
   theme_bw() + Nice.Label
 
-### velocity vs. time
+## spiral normalized drawing
+ggplot()+
+  #geom_point(data = spiral_LH, aes(x=x, y= y), size  = 2, color = "orange")+ ## app spiral
+  geom_path(data = true_spiral, aes(x=xt, y= yt), lwd = (linewidth*96)/3, color = "orange") +
+  geom_point(data = patient_spiral, aes(x=x_norm, y= y_norm), size  = 2)+ ## cohort spiral
+  geom_path(data = patient_spiral, aes(x=x_norm, y= y_norm), size = .9) +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "X-Coordinates", y = "Y-Coordinates") + 
+  theme_bw() + Nice.Label
+
+
+
+####### velocity vs. time plot
 ggplot(patient_spiral, aes(x=time, y= filter_func(v_i,time,8)))+
   geom_point(size  = 2.0)+
   geom_line(size = 0.9) +
