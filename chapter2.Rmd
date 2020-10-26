@@ -1,0 +1,446 @@
+
+# Features extraction
+
+As previously done in [Creagh et al., 2020](https://iopscience.iop.org/article/10.1088/1361-6579/ab8771/pdf), several features can extracted from drawing shape by an MS patient to capture temporal, spatial,and spatiotemporal factors in the drawing task that could be an indicative of manual dexterity. Thus we start by calculating each of these features:
+
+## Temporal features
+
+To measure temporal irregularities, several authors ( [Banaszkiewicz et al., 2008](https://europepmc.org/article/med/19353440), [Memedi et al., 2015](https://www.mdpi.com/1424-8220/15/9/23727), [Creagh et al., 2020](https://iopscience.iop.org/article/10.1088/1361-6579/ab8771/pdf) ) calculated the drawing velocities,angular and radial velocities to illustrate temporal features that may emerge in the upper extremity function of MS patients. These features were calculated using the following formula from ( [Memedi et al., 2015](https://www.mdpi.com/1424-8220/15/9/23727) and [Creagh et al., 2020](https://iopscience.iop.org/article/10.1088/1361-6579/ab8771/pdf) ):
+
+
+$$v = \sum_{i=1}^{N-1} \frac{\sqrt{(x_{i+1}-x_i)^2 + (y_{i+1}-y_i)^2}}{t_{i+1}-t_i}$$
+with $v$ the drawing velocity. Radial velocity (RV) is calculated as:
+$$RV = \sum_{i=1}^{N-1} \frac{r_{i+1}-r_i}{t_{i+1}-t_i}$$
+where $r = \sqrt{x^2+y^2}$ is the radius. Angular velocity (RHOV) is also calculated as 
+
+$$RHOV = \sum_{i=1}^{N-1} \frac{\theta_{i+1}-\theta_i}{t_{i+1}-t_i}$$
+
+where $\theta = tan^{-1}\left(\frac{y}{x}\right)$. $x$ and $y$ in each formula are the coordinates of the drawing pixel and $t$ is time in seconds. $N$ is the total number of pixel.
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+## Read scaled data
+ms_data.xy_sc <- read.csv("data_xy_scale.csv", header = TRUE)
+
+## Calculate velocity (v), radial velocity (rv), angular velocity (av) by patients, test date, and difficulty level
+## Initialize velocity (v), radial velocity (rv), angular velocity (rhov)
+
+veclocity_func <- function(data){
+  ## data is the entire dataset with x and y scaled
+  
+  data[,"d_t"] <- 0 ## intialize an empty 0 column of delta time
+  data[,"v_i"] <- 0 ## intialize an empty 0 column of velocities
+  data[,"rv_i"] <- 0 ## intialize an empty 0 column of radial velocities
+  data[,"av_i"] <- 0 ## intialize an empty 0 column of angular velocities
+  
+  # create an empty dataframe to be used later
+  new.tr.level <- data[0,]
+  
+  ## factor levels of patient ID
+  p.id <- levels(factor(data$patient_id))
+  
+  for (id in p.id) {
+    patient_data <- subset(data, patient_id==id) ## select a single patient
+    n.test <- levels(factor(patient_data$ntest_date))
+    for (tn in n.test) {
+      test_date <- subset(patient_data, ntest_date==tn) ## select one test date
+      d.levels <- levels(factor(test_date$difficulty_level))
+      for (dl in d.levels) {
+        d.level <- subset(test_date, difficulty_level==dl) ## select difficulty level
+        tr.levels <- levels(factor(d.level$trial_id))
+        for (tr in tr.levels){
+          tr.level <- subset(d.level, trial_id==tr) ## select trial_id
+          dim_tr.level1 <- dim(tr.level)[1] ## Make sure the dimension of each trial > 2
+          if (dim_tr.level1>2){
+            for (i in 1:(dim_tr.level1 - 1)) {
+              tr.level[i+1,"d_t"] <- (tr.level$time[i+1]-tr.level$time[i]) # delta time
+              tr.level[i+1,"v_i"] <- sqrt((tr.level$x_sc[i+1] - tr.level$x_sc[i])^2 +
+                                            (tr.level$y_sc[i+1] - tr.level$y_sc[i])^2
+              )/(tr.level$time[i+1]-tr.level$time[i]) # velocity
+              tr.level[i+1,"rv_i"] <- (sqrt((tr.level$x_sc[i+1])^2 + (tr.level$y_sc[i+1])^2) -                                       sqrt((tr.level$x_sc[i])^2 + (tr.level$y_sc[i])^2)
+              )/(tr.level$time[i+1]-tr.level$time[i]) # radial velocity
+              tr.level[i+1,"av_i"] <- (atan(tr.level$y_sc[i+1]/tr.level$x_sc[i+1]) -
+                                         atan(tr.level$y_sc[i]/tr.level$x_sc[i])
+              )/(tr.level$time[i+1]-tr.level$time[i]) # angular velocity
+              
+            }
+            new.tr.level <- rbind(new.tr.level, tr.level) ## append the data
+          }
+        }
+      }
+    }
+  }
+  
+  return(as.data.frame(new.tr.level))  
+}
+
+# #### Calculate the velocity
+# ptm <- proc.time() ## Check how long it will run (takes 7.6 min to run)
+# 
+# ms_data4 <- veclocity_func(ms_data.xy_sc)
+# 
+# proc.time() - ptm
+# 
+# write.csv(ms_data4, file = "new_spiral.csv")
+
+## The code to calculate v, rv, and av take long so the data was saved to be used later
+ms_data4 <- read.csv("new_spiral.csv", header = TRUE)
+
+```
+
+
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+
+## Create a function that will use Fourier Transform to lowpass filter the data
+filter_func <- function(x, t, fc){
+  ## x is the vector array that need to be filter
+  ## t the time component of the vector array
+  ## cf is the cut off frequency
+  
+  ## fs (sampling frequency)= no of samples/ sampling time (max time)
+  fs <- length(x)/max(t)   # sampling frequency
+  ns <- length(x)  # number of samples
+  ## convert sample to ts object with sampling rate as fs
+  s <- na.omit(ts(x, frequency = fs)) 
+  ft <- fft(s) ## fourier transform
+  lft <- length(ft) ## length of fourier transform
+  bin <- ns/(fs/fc) ## Create the upper bin cut-off point
+  
+  if (lft>=bin){
+    ft[-c(1:bin, (lft-bin):lft)] <- 0 ## Null the upper bins
+  } else{
+    ft <- ft ## No filter if lft is larger than bin
+  }
+  x_lowpass.f <- Re(fft(ft, inv=TRUE))/lft ## lowe pass filter
+  return(x_lowpass.f)
+}
+
+
+
+#### Function to create plotting data point acconrding to true spiral appendage
+
+spiral_data_func <- function(data, patientID, ntest){
+  ## data is the dataframe
+  ## patientID is the patient Id
+  ## ntest is the nth number of testdate for patient i
+  
+  p1 <- subset(data, patient_id == patientID)
+  p1$difficulty_level <- factor(p1$difficulty_level, 
+                                labels = c("Difficulty Level 1","Difficulty Level 2",
+                                           "Difficulty Level 3"))
+  p11 <- subset(p1, ntest_date==ntest) ## select one test date (1)
+  p11_sub <- p11 %>% 
+    group_by(difficulty_level) %>% 
+    dplyr::filter(trial_id==levels(factor(trial_id))[1]) %>% 
+    dplyr::select(patient_id, testdate, difficulty_level, trial_id, 
+                  ntest_date,time, x, y, x_sc, y_sc, v_i, rv_i, av_i, appendage)
+  
+  ## generate spiral with difficulty 1, 2, and 3
+  dl1 <- "Difficulty Level 1"
+  dl2 <- "Difficulty Level 2"
+  dl3 <- "Difficulty Level 3"
+  append1 <- subset(p11_sub,difficulty_level == dl1)$appendage[1]
+  append2 <- subset(p11_sub,difficulty_level == dl2)$appendage[1]
+  append3 <- subset(p11_sub,difficulty_level == dl3)$appendage[1]
+  
+  spiral_dl1 <- as.data.frame(GenerateSpiral(append1,1))
+  spiral_dl1$difficulty_level = rep(dl1, dim(spiral_dl1)[1])
+  spiral_dl2 <- as.data.frame(GenerateSpiral(append2,2))
+  spiral_dl2$difficulty_level = rep(dl2, dim(spiral_dl2)[1])
+  spiral_dl3 <- as.data.frame(GenerateSpiral(append3,3))
+  spiral_dl3$difficulty_level = rep(dl3, dim(spiral_dl3)[1])
+  
+  spiral_data <- rbind(spiral_dl1, spiral_dl2, spiral_dl3)
+  colnames(spiral_data) <- c("xt","yt","linewidth","difficulty_level")
+  
+  return(list(patient_spiral = p11_sub, true_spiral = spiral_data))
+  #spiral_dat <- merge(p11_sub,spiral_LH, by = "difficulty_level", all = TRUE)
+}
+
+
+
+##### Plot some of the data
+### NIB446 == HV, difficulty hands direction: LH, LH, LH
+### NIB632 == MS, difficulty hands direction: RH, LH, RH
+### NDS670 == Others, difficulty hands direction: LH, LH, LH
+
+p1 <- subset(ms_data4, patient_id=="NIB189") ## select single patient ## NIB112 
+p1$difficulty_level <- factor(p1$difficulty_level, 
+                              labels = c("Difficulty Level 1","Difficulty Level 2",
+                                                              "Difficulty Level 3"))
+p11 <- subset(p1, ntest_date=="2") ## select one test date (1)
+p111 <- subset(p11, difficulty_level=="Difficulty Level 3") ## select single difficulty level (1)
+p1111 <- subset(p111, trial_id =="l1tYe4RlsAomFgxdPFDv") #p111$trial_id[1]) ## select one trial_id
+
+## select only one trial_id
+p11_sub <- p11 %>% 
+  group_by(difficulty_level) %>% 
+  dplyr::filter(trial_id==levels(factor(trial_id))[1])
+```
+
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+## Compute the spiral according to the appendage and extract data for plotting
+spiral_data <- spiral_data_func(ms_data4, "NIB657","1")
+patient_spiral <- as.data.frame(spiral_data$patient_spiral)
+true_spiral <- as.data.frame(spiral_data$true_spiral)
+linewidth <- spiral_data$true_spiral$linewidth
+
+##### Spiral plots
+## raw drawing
+##  lwd=1 is equal to 1/96 inch, which is exactly as 0.75 * 1/72 inch (0.75pt)
+ggplot()+
+  #geom_point(data = spiral_LH, aes(x=x, y= y), size  = 2, color = "orange")+ ## app spiral
+  geom_path(data = true_spiral, aes(x=xt, y= yt), lwd = (linewidth*96)/3, color = "orange") +
+  geom_point(data = patient_spiral, aes(x=x, y= y), size  = 2)+ ## cohort spiral
+  geom_path(data = patient_spiral, aes(x=x, y= y), size = .9) +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "X-Coordinates", y = "Y-Coordinates") + 
+  theme_bw() + Nice.Label
+
+## spiral normalized drawing
+ggplot()+
+  #geom_point(data = spiral_LH, aes(x=x, y= y), size  = 2, color = "orange")+ ## app spiral
+  geom_path(data = true_spiral, aes(x=xt, y= yt), lwd = (linewidth*96)/3, color = "orange") +
+  geom_point(data = patient_spiral, aes(x=x_sc, y= y_sc), size  = 2)+ ## cohort spiral
+  geom_path(data = patient_spiral, aes(x=x_sc, y= y_sc), size = .9) +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "X-Coordinates", y = "Y-Coordinates") + 
+  theme_bw() + Nice.Label
+
+
+
+####### velocity vs. time plot
+ggplot(patient_spiral, aes(x=time, y= filter_func(v_i,time,8)))+
+  geom_point(size  = 2.0)+
+  geom_line(size = 0.9) +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Time (s)", y = "Drawing Velocity (Pixels/s)") + 
+  theme_bw()+Nice.Label 
+
+```
+
+
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## calculate the sum, coefiicient of variation, skew for v, rv, and av
+## Function to calculate coefficient of variation
+cv = function(vector){
+  coefvar <- sd(vector, na.rm = TRUE)/ mean(vector, na.rm = TRUE)
+  return(coefvar)
+}
+
+ms_data.sum <- ms_data4 %>% 
+  group_by(patient_id,ntest_date,difficulty_level, trial_id) %>% 
+  summarise(v_sum = sum(v_i, na.rm = TRUE), v_cv = cv(v_i), 
+            v_sk = skewness(v_i, na.rm = TRUE), v_kt = kurtosis(v_i, na.rm = TRUE), 
+            rv_sum = sum(rv_i, na.rm = TRUE), rv_cv = cv(rv_i), 
+            rv_sk = skewness(rv_i, na.rm = TRUE), na.rm = TRUE, rv_kt = kurtosis(rv_i),
+            av_sum = sum(av_i,na.rm = TRUE), av_cv = cv(av_i), 
+            av_sk = skewness(av_i, na.rm = TRUE), av_kt = kurtosis(av_i, na.rm = TRUE))
+
+
+#### Power Spectral Density using Welsh periodogram with a Hamming window
+## Maximum PSD and dominant i.e., frequency corresponding to max(PSD)--see Creagh et. al, 2020
+
+## function to calculate PSD with hamming window of length = length(velocity vector)
+pwelch_func <- function(vector){
+  result = pwelch(vector, window = hamming(length(vector)), plot = FALSE)
+  freq = result$freq
+  spec = result$spec
+  return(as.data.frame(list(freq=freq,spec=spec)))
+}
+  
+  
+ms_data.psd <- ms_data4 %>% 
+   group_by(patient_id, ntest_date, difficulty_level, trial_id) %>%
+  summarise(v_psd.max = max(pwelch_func(filter_func(v_i,time,7))$spec), 
+            v_df = pwelch_func(filter_func(v_i,time,7))$freq[which.max(pwelch_func(filter_func(v_i,time,7))$spec)],
+            rv_psd.max = max(pwelch_func(filter_func(rv_i,time,7))$spec),
+            rv_df = pwelch_func(filter_func(rv_i,time,7))$freq[which.max(pwelch_func(filter_func(rv_i,time,7))$spec)],
+            av_psd.max = max(pwelch_func(filter_func(av_i,time,7))$spec),
+            av_df = pwelch_func(filter_func(av_i,time,7))$freq[which.max(pwelch_func(filter_func(av_i,time,7))$spec)])
+
+### Power vs. frequency plot
+## Create the data frame by filtering and calculating the power
+
+p11_sub1 <- subset(p11_sub, difficulty_level == "Difficulty Level 1")
+p11_sub2 <- subset(p11_sub, difficulty_level == "Difficulty Level 2")
+p11_sub3 <- subset(p11_sub, difficulty_level == "Difficulty Level 3")
+
+psd_df1 <- data.frame(difficulty_level = "Difficulty Level 1",
+                      pwelch_func(filter_func(p11_sub1$v_i, p11_sub1$time, 8)))
+psd_df2 <- data.frame(difficulty_level = "Difficulty Level 2",
+                      pwelch_func(filter_func(p11_sub2$v_i, p11_sub2$time, 8)))
+psd_df3 <- data.frame(difficulty_level = "Difficulty Level 3",
+                      pwelch_func(filter_func(p11_sub3$v_i, p11_sub3$time, 8)))
+
+psd_df <- rbind(psd_df1,psd_df2,psd_df3) ## row bind psd for all difficulty levels
+
+ggplot(psd_df, aes(x =freq,spec))+
+  geom_point(size  = 2.0)+
+  geom_line(size = 0.9) +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Frequency (Hz)", y = expression("Power (Pixels/s) "^2)) + 
+  theme_bw()+Nice.Label 
+
+
+### Approximate Entropy (ApEn)
+## Interpolate all v_i, r_vi, av_i over a fixed length L = 500 (see similar approach in Creagh et al., 2020) and calculate their entropy 
+ms_data.apen <- ms_data4 %>% 
+   group_by(patient_id,ntest_date,difficulty_level, trial_id) %>%
+  summarise(v_apen = ApEn(spline(v_i, n = 500)$y), 
+            rv_apen = ApEn(spline(rv_i, n = 500)$y), 
+            av_apen = ApEn(spline(av_i, n = 500)$y))
+
+
+p1.apen <- subset(ms_data.apen, patient_id=="NIB632" & ntest_date=="1")
+p1.apen <- p1.apen %>% select(patient_id, difficulty_level, v_apen)
+p1.apen$difficulty_level <- as.factor(p1.apen$difficulty_level)
+  
+#+++++++++++++++++++++++++
+# Function to calculate the mean and the standard deviation
+  # for each group
+#+++++++++++++++++++++++++
+# data : a data frame
+# varname : the name of a column containing the variable
+  #to be summariezed
+# groupnames : vector of column names to be used as
+  # grouping variables
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+ return(data_sum)
+}
+
+####
+
+p1.apen.sum <- data_summary(p1.apen, "v_apen", "difficulty_level")
+  
+ggplot(p1.apen.sum, aes(x=difficulty_level, y=v_apen)) + 
+    geom_bar(stat="identity", color="black", colour = "gray", width = 0.5, 
+           position=position_dodge()) +
+  labs(x = "Difficulty Levels", y = "Approximate Speed Entropy") +
+    geom_errorbar(aes(ymin=v_apen-sd, ymax=v_apen+sd), width=.2, size = 0.9,
+                  position=position_dodge(0.05))+ theme_bw() + Nice.Label
+
+
+###
+
+
+### "NIB657"    "NIB659"    "NIB661"    "NIB662"    "NIB663"    "NIB664"    "PATIENT10" 
+##"NDS688"    "NDS689"    "NDS690"    "NDS691"    "NDS692"    "NDS693"    "NDS694"    "NDS696"
+p1 <- subset(ms_data4, patient_id=="NIB205") ## select single patient ## NIB112 ##NDS668
+p11 <- subset(p1, ntest_date=="36") ## select one test date (1)
+p111 <- subset(p11, difficulty_level=="2") ## select single difficulty level (1)
+p1111 <- subset(p111, trial_id == "inZJofKGHweVTKUO28es") ## "JSpymPxwdnXwvLzXpjym"
+##
+
+x<- p1111$x - p1111$x[25]
+y<- p1111$y - p1111$y[25]
+
+t <- p1111$time
+x <- p1111$av_i
+z <- filter_func(x, t, 8) # apply filter
+## fs (sampling frequency)= no of samples/ sampling time (max time)
+## The highest frequency  is assumed to be fs/2
+
+pz <- pwelch_func(z) 
+
+plot(pz$freq,pz$spec, 'o')
+
+plot(t,x,'o')
+lines(t,z,col="orange")
+
+```
+
+
+
+
+```{r  echo=FALSE, warning=FALSE, message=FALSE, fig.height=6, fig.width= 10}
+
+library(VennDiagram)
+
+spiraldata1 <- read.csv("spiralDS1.csv", header = TRUE)
+
+Spiral_Vanessa <- ms_data$patientID
+Spiral_Peter <- spiraldata1$metaData.ID
+
+S_vanessa.l <- length(levels(factor(Spiral_Vanessa)))
+S_Peter.l <- length(levels(factor(Spiral_Peter)))
+cross.area <- length(intersect(Spiral_Vanessa,Spiral_Peter))
+diff_Van.Pet <- setdiff(Spiral_Vanessa,Spiral_Peter)
+diff_Pet.Van <- setdiff(Spiral_Peter,Spiral_Vanessa)
+
+grid.newpage();
+venn.plot <- draw.pairwise.venn(area1 = S_vanessa.l, 
+                                area2 = S_Peter.l, 
+                                cross.area = cross.area,
+                                #col = "red",
+                                lty = "blank",
+                                cat.cex = c(1.5,1.5), cex = c(2.5,2.5,2.5),
+                 fill = c("green", "blue"),
+                 category = c("Vanessa Data", "Peter Data"));
+grid.draw(venn.plot)
+
+
+### Splitting the dataset
+#a # original data frame
+
+#train<-sample_frac(a, 0.7)
+#sid<-as.numeric(rownames(train)) # because rownames() returns character
+#test<-a[-sid,]
+
+## euclidean distance
+euc.dist <- function(x2,y2){
+  x1 <- 0
+  y1 <- 0
+  return(sqrt((x1 - x2) ^ 2 + (y1-y2)^2))
+}
+
+ms_dist <- tibble::as_tibble(ms_data4) %>% 
+  group_by(patient_id, ntest_date, difficulty_level, trial_id) %>% 
+  summarise(dist = euc.dist(x,y)) %>% 
+  slice(1)
+
+ms_dist$difficulty_level <- factor(ms_dist$difficulty_level, 
+                                   labels = c("Difficulty Level 1",
+                                              "Difficulty Level 2",
+                                              "Difficulty Level 3") )
+
+
+ggplot(ms_dist, aes(x=dist)) +
+  geom_histogram(color="darkblue", fill="lightblue", bins = 50) +
+  facet_wrap(~difficulty_level, nrow = 1, scales = "free") +
+  labs(x = "Euclidean Distance between (0,0) and First Spiral Point", y = "Count") +
+  theme_bw() + Nice.Label
+
+ms_dist.var <- tibble::as_tibble(ms_dist)  %>% 
+  group_by(patient_id, difficulty_level) %>% 
+  summarise(dist_var = var(dist))
+
+ggplot(ms_dist.var, aes(x=dist_var)) +
+  geom_histogram(color="darkblue", fill="lightblue", bins = 10) +
+  facet_wrap(~difficulty_level, nrow = 1, scales = "free") +
+  labs(x = "Variance of Euclidean Distance by Patient", y = "Count") +
+  theme_bw() + Nice.Label
+
+```
+
