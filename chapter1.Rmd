@@ -14,7 +14,8 @@ library(psd) ## v. 2.1.0 ## power spectral density -- https://cran.r-project.org
 library(TSEntropies) ## v. 0.9 ## to calculate Approximate Entropies (ApEn)-- https://cran.r-project.org/web/packages/TSEntropies/TSEntropies.pdf
 library(oce) ## v.1.2.0 ## oceanographic library which contain PSD with hamming window
 library(tidyr) ## v. 1.1.0 ## for gather and wide
-library(VennDiagram) ## v. ## Venn diagram 
+library(VennDiagram) ## v.1.6.20 ## Venn diagram 
+library(forecast) ## v. 8.13 ## for outlier detection https://cran.r-project.org/web/packages/forecast/forecast.pdf
 ```
 
 

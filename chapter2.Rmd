@@ -189,7 +189,7 @@ p11_sub <- p11 %>%
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
 ## Compute the spiral according to the appendage and extract data for plotting
-spiral_data <- spiral_data_func(ms_data4, "NIB657","1")
+spiral_data <- spiral_data_func(ms_data4, "NIB655","1")
 patient_spiral <- as.data.frame(spiral_data$patient_spiral)
 true_spiral <- as.data.frame(spiral_data$true_spiral)
 linewidth <- spiral_data$true_spiral$linewidth
@@ -347,10 +347,10 @@ ggplot(p1.apen.sum, aes(x=difficulty_level, y=v_apen)) +
 
 ### "NIB657"    "NIB659"    "NIB661"    "NIB662"    "NIB663"    "NIB664"    "PATIENT10" 
 ##"NDS688"    "NDS689"    "NDS690"    "NDS691"    "NDS692"    "NDS693"    "NDS694"    "NDS696"
-p1 <- subset(ms_data4, patient_id=="NIB205") ## select single patient ## NIB112 ##NDS668
-p11 <- subset(p1, ntest_date=="36") ## select one test date (1)
-p111 <- subset(p11, difficulty_level=="2") ## select single difficulty level (1)
-p1111 <- subset(p111, trial_id == "inZJofKGHweVTKUO28es") ## "JSpymPxwdnXwvLzXpjym"
+p1 <- subset(ms_data4, patient_id=="NDS668") ## select single patient ## NIB112 ##NDS668
+p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
+p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
+p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## "JSpymPxwdnXwvLzXpjym"
 ##
 
 x<- p1111$x - p1111$x[25]
