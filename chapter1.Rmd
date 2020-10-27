@@ -78,6 +78,12 @@ ms_data[ms_data$patientID =="NIB703" & ms_data$testdate=="2019-08-21",]$patientI
 ## Retrive some of the healthy volunteers that start with PATIENT..
 HV_Patient <- ms_data[substr(ms_data$patientID,1,7)=="PATIENT",]
 
+```
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
 ## add visit number based on patientID and difficulty level, remove some columns and change column names
 ms_data2 <- ms_data %>% 
   group_by(patientID, difficulty) %>%
@@ -94,6 +100,12 @@ ms_data2 <- ms_data2 %>%
   arrange(t) %>% 
   mutate(pixel = row_number(), time = t-t[1])
 
+```
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
 
 ####### Clinical data
 #### Add new diagnosis category to the clinical data 
@@ -116,6 +128,12 @@ cl_data.sub <- cl_data %>%
 ## Extracting the MS patients from clinicalm dataset
 cl_data_patient <- subset(cl_data.sub, diagnosis_group =="MS") 
 cl_data_patient <- mutate(cl_data_patient, id = row_number())
+
+```
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
 
 ### Splitting the dataset 2/3 training and 1/3 test sets
 set.seed(42)
@@ -177,14 +195,33 @@ ms_data_test <- merge_func(cl_ms = cl_test, cl_data = cl_data.sub, ms_data = ms_
 ##### Remove lines with y coordinate < -0.8 and x coordinates > 1.2 so completely
 #### outside of the the orange real spiral (i.e. it is an error)
 
+```
 
-Error_x_y <- subset(ms_data_train, 
-                    (difficulty_level == 1 & y < -1.4 & abs(x) > 0.7) |
-                    (difficulty_level == 2 & y < -0.8 & abs(x) > 1.2) |
-                    (difficulty_level == 3 & y < -0.8 & abs(x) > 1.2))
+## Removing outliers
+In what follow we removed outliers using the y coordinates points by first identifying residuals from loess fitting curve. Then the residuals are labelled as outliers if they lie outside of the range $\pm 2(q_{0.9}- q_{0.1}$ where $q_p$ is the p quantile of the residuals. The procedure was done using the ``tsoutliers" library and more can be seen regarding that in [tsoutliers documentation](https://robjhyndman.com/hyndsight/forecast5/#:~:text=A%20more%20general%20function%20is,values%20replaced%20by%20estimated%20values). 
 
-ms_data3 <- ms_data_train %>% anti_join(Error_x_y) %>% 
-  arrange(patient_id,ntest_date, difficulty_level, trial_id, time)
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+## Function to detect and remove outlier from a given trial
+outlier_func <- function(dataframe){
+  ## dataframe is a data frame containing y coordinate
+  data_with_id <- dataframe %>% mutate(id = row_number())
+  outlier_index <- tsoutliers(data_with_id$y, lambda = "auto")$index
+  
+  if (length(outlier_index) == 0){
+    new_data = data_with_id %>% select(-id)
+  } else {
+    new_data = data_with_id %>% dplyr::filter(id != outlier_index) %>% select(-id)
+  }
+  return(new_data)
+}
+
+
+## Remove the outlier by trail group 
+ms_data3 <- ms_data_train %>% 
+  group_by(patient_id, ntest_date, difficulty_level, trial_id) %>%
+  group_modify(~outlier_func(.x))
 
 ```
 
@@ -202,9 +239,9 @@ Nice.Label <-theme(axis.text.x = element_text(face="bold", color="black", size=1
 
 ### Tranform from long tabel to wide table
 
-metadata_sub.long <- ms_data3 %>% 
-  dplyr::distinct(patient_id, .keep_all = TRUE) %>%
+metadata_sub.long <- tibble::as_tibble(ms_data3) %>% 
   dplyr::select(patient_id,diagnosis_group,dominant_hand, gender) %>%
+  dplyr::distinct(patient_id, .keep_all = TRUE) %>%
   tidyr::gather(group, attribute, diagnosis_group:gender, factor_key = TRUE) 
 
 metadata_sub.long$group <- factor(metadata_sub.long$group,

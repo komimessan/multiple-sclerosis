@@ -347,7 +347,7 @@ ggplot(p1.apen.sum, aes(x=difficulty_level, y=v_apen)) +
 
 ### "NIB657"    "NIB659"    "NIB661"    "NIB662"    "NIB663"    "NIB664"    "PATIENT10" 
 ##"NDS688"    "NDS689"    "NDS690"    "NDS691"    "NDS692"    "NDS693"    "NDS694"    "NDS696"
-p1 <- subset(ms_data4, patient_id=="NDS668") ## select single patient ## NIB112 ##NDS668
+p1 <- subset(ms_data4, patient_id=="NDS673") ## select single patient ## NIB112 ##NDS668
 p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
 p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
 p1111 <- subset(p111, trial_id == p111$trial_id[1]) ## "JSpymPxwdnXwvLzXpjym"
