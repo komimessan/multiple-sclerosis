@@ -108,6 +108,22 @@ ms_data2 <- ms_data2 %>%
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
 ####### Clinical data
+
+#### Extrract the clinical label names and change them to CL1
+cl_dat <- cl_data
+cl_labels <- colnames(cl_dat)
+cl_labels.sub <- cl_labels[-c(1:9,40)]
+
+## new clinical labels
+new_cl_label <- paste(rep("CL",length(cl_labels.sub)),1:length(cl_labels.sub),sep = "")
+
+## Create index and replace the cl labels with index 
+new_cl_index <- match(cl_labels.sub, cl_labels)
+colnames(cl_data)[new_cl_index] <- new_cl_label
+
+## To recognize which label is what column name
+cl_label_table <- data.frame(Label = new_cl_label, Name = cl_labels.sub)
+
 #### Add new diagnosis category to the clinical data 
 #### (MS, HV, and Others for all others disorder)
 cl_data$diagnosis_group <- ifelse(
@@ -118,11 +134,12 @@ cl_data$diagnosis_group <- ifelse(
 cl_data$age <- round(cl_data$age)
 
 ## Create clinical data that contain patient that intersect with those in the ms_data
+## CL6=X9HPT.LH.Avg + CL7=X9HPT.RH.Avg
 cl_data.sub <- cl_data %>% 
   dplyr::rename(dominant_hand = handedness, patient_id=NeurExPatientID, 
                 testdate = "AppTestDate", neuro_testdate ="NeurExDate",
                 apptest_to_neurotest = "X..days.between.app.test.and.clinic.visit") %>% 
-  mutate(X9HPT.Avg = (X9HPT.LH.Avg + X9HPT.RH.Avg)/2)
+  mutate(X9HPT.Avg = (CL6+CL7)/2)
 
 
 ## Extracting the MS patients from clinicalm dataset
@@ -344,9 +361,13 @@ normXY_func <- function(data){
   # create an empty dataframe to be used later
   new.tr.level <- data[0,]
   
-  ## Initialize the scaled x and y coordinates
-  data$x_sc <- rep(0, dim(data)[1])
-  data$y_sc <- rep(0, dim(data)[1])
+  #### Initialize the scaled x and y coordinates
+  ## Based on first points of the patient
+  data$x_scf <- rep(0, dim(data)[1])
+  data$y_scf <- rep(0, dim(data)[1])
+  ## Shift to center for all spiral
+  data$x_scc <- rep(0, dim(data)[1])
+  data$y_scc <- rep(0, dim(data)[1])
   
   for (id in p.id) {
     patient_data <- subset(data, patient_id==id) ## select a single patient
@@ -360,32 +381,41 @@ normXY_func <- function(data){
         for (tr in tr.levels){
           tr.level <- subset(d.level, trial_id==tr) ## select trial_id
           
+          dim_tr <- dim(tr.level)[1] ## length of the trial level
           
           appendage <- tr.level$appendage[1]
           spiral_dl <- as.data.frame(GenerateSpiral(appendage,dl))
           
-          ## use this if first point is outward
+          #### use this if first point is outward
+          # shitf based on first point
           norm.xo <- last(spiral_dl$x) - tr.level$x[1]
           norm.yo <- last(spiral_dl$y) - tr.level$y[1]
+          # shift based on center point
+          norm.xo2 <- first(spiral_dl$x) - tr.level$x[dim_tr]
+          norm.yo2 <- first(spiral_dl$y) - tr.level$x[dim_tr]
           
-          ## use this if first point is inward
+          #### use this if first point is inward
           norm.xi <- first(spiral_dl$x) - tr.level$x[1]
           norm.yi <- first(spiral_dl$y) - tr.level$y[1]
-          
-          dim_tr <- dim(tr.level)[1] ## length of the trial level
           
           ## scale the x and y coordinates
           
           for (j in 1:(dim_tr)) {
-            if (tr.level$y[1] > tr.level$y[dim_tr]){
-              tr.level[j, "x_sc"] <- tr.level$x[j] + norm.xo
-              tr.level[j, "y_sc"] <- tr.level$y[j] + norm.yo
-            } else if (tr.level$y[1] < tr.level$y[dim_tr]){
-              tr.level[j, "x_sc"] <- tr.level$x[j] + norm.xi
-              tr.level[j, "y_sc"] <- tr.level$y[j] + norm.yi
-            } else {
-              tr.level[j,"x_sc"] <- NA
-              tr.level[j,"y_sc"] <- NA
+            if (tr.level$y[1] > tr.level$y[dim_tr]){ ## outward loop
+              tr.level[j, "x_scf"] <- tr.level$x[j] + norm.xo
+              tr.level[j, "y_scf"] <- tr.level$y[j] + norm.yo
+              tr.level[j, "x_scc"] <- tr.level$x[j] + norm.xo2
+              tr.level[j, "y_scc"] <- tr.level$y[j] + norm.yo2
+            } else if (tr.level$y[1] < tr.level$y[dim_tr]){ ## inward loop
+              tr.level[j, "x_scf"] <- tr.level$x[j] + norm.xi
+              tr.level[j, "y_scf"] <- tr.level$y[j] + norm.yi
+              tr.level[j, "x_scc"] <- tr.level$x[j] + norm.xi
+              tr.level[j, "y_scc"] <- tr.level$y[j] + norm.yi
+            } else { ## anything else
+              tr.level[j,"x_scf"] <- NA
+              tr.level[j,"y_scf"] <- NA
+              tr.level[j,"x_scc"] <- NA
+              tr.level[j,"y_scc"] <- NA
             }
             
           }
@@ -402,8 +432,8 @@ normXY_func <- function(data){
 
 
 # ####
-# ptm <- proc.time() ## Check how long it will run (takes 9 min to run)
-#   
+# ptm <- proc.time() ## Check how long it will run (takes 38.8 min to run)
+# 
 # ms_data.xy_sc <- normXY_func(ms_data3)
 # 
 # proc.time() - ptm
