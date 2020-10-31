@@ -16,6 +16,7 @@ library(oce) ## v.1.2.0 ## oceanographic library which contain PSD with hamming 
 library(tidyr) ## v. 1.1.0 ## for gather and wide
 library(VennDiagram) ## v.1.6.20 ## Venn diagram 
 library(forecast) ## v. 8.13 ## for outlier detection https://cran.r-project.org/web/packages/forecast/forecast.pdf
+library(fda.usc) ## v. 2.0.2
 ```
 
 
@@ -235,7 +236,7 @@ outlier_func <- function(dataframe){
 }
 
 
-## Remove the outlier by trail group 
+## Remove the outlier by trial group 
 ms_data3 <- ms_data_train %>% 
   group_by(patient_id, ntest_date, difficulty_level, trial_id) %>%
   group_modify(~outlier_func(.x))
@@ -392,7 +393,7 @@ normXY_func <- function(data){
           norm.yo <- last(spiral_dl$y) - tr.level$y[1]
           # shift based on center point
           norm.xo2 <- first(spiral_dl$x) - tr.level$x[dim_tr]
-          norm.yo2 <- first(spiral_dl$y) - tr.level$x[dim_tr]
+          norm.yo2 <- first(spiral_dl$y) - tr.level$y[dim_tr]
           
           #### use this if first point is inward
           norm.xi <- first(spiral_dl$x) - tr.level$x[1]
@@ -431,13 +432,13 @@ normXY_func <- function(data){
 
 
 
-# ####
+####
 # ptm <- proc.time() ## Check how long it will run (takes 38.8 min to run)
 # 
 # ms_data.xy_sc <- normXY_func(ms_data3)
 # 
 # proc.time() - ptm
-# 
+# # 
 # 
 # ## Save to be use later
 # write.csv(ms_data.xy_sc, file = "data_xy_scale.csv")

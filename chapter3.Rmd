@@ -1,0 +1,225 @@
+# Spatial features extraction
+
+## Hausdorff Distance (dH(X,Y))
+We computed drawing error based on a shape-matching approach known as the Hausdorff distance.First, let $X$ and $Y$ be two-non empty subsets of a metric space $(M, d)$ where $M$ is set and $d$ is a metric or distance on $M$. The formula of the Hausdorff distance $d_H(X,Y)$ is as follow:
+$$d_H(X,Y) = \max\{\sup_{x\in X} \inf_{y\in Y} d(x,y), \sup_{y\in Y}\inf_{x\in X} d(x,y)\}$$
+From Creagh et al., 2020, it was stated that ``This metric compares the maximum distance of one set to the nearest point in another set, which can be used as a basis to compute the error between the reference way-points (interpolated into a reference shape scaled to the number of pixels drawn) and the subject’s drawing attempt". Thus wqe took similar approach by first interpolating the reference points to the size of the drawing attempt prior to calculating the $d_H(X,Y)$.
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+## Function to set up the data frame to later calculate the Hausdorff distances
+HausD_dataframe <- function(data, xs, ys){
+  ## data is the dataframe containing drawn x and y coordinates
+  ## xs and ys are the x and y coordinates
+  
+  appendage <- data$appendage[1]
+  dl <- data$difficulty_level[1]
+  spiral_dl <- GenerateSpiral(appendage,dl)
+  
+  ## interpolate the reference spiral to the size of x coordinate
+  # Drawn coordinates
+  x <- data[, xs]
+  y <- data[, ys]
+  dat <- fdata(data.frame(x1=x,y1=y)) ## convert to functional data class
+  # reference coordinate interpolated to the lengh of x
+  ref_x <- spline(spiral_dl$x, n=length(x))$y
+  ref_y <- spline(spiral_dl$y, n=length(y))$y
+  ref_dat <- fdata(data.frame(x2=ref_x,y2=ref_y)) ## convert to functional data class
+  
+  
+  return(list(drawing_df = dat, ref_df = ref_dat))
+}
+
+####
+
+HausData_func <- function(data, xs, ys){
+  ## data is the entire dataset with x and y scaled
+  ## xs is the x coordinates to use (either x_scf or x_scc)
+  ## ys is the y coordinates to use (either y_scf or y_scc)
+  
+  #### intialize an empty 0 column
+  data[,"hausD"] <- 0 ##  Maximum H_d
+  data[,"hausDError"] <- 0 ## Sum of  H_d (error)
+  data[, "hausDt"] <- 0 ## H_d normalized by time taking to complete the drawing
+  data[,"hausDIqr"] <- 0 ## Interquartile range of H_d
+  data[, "hausD25"] <- 0 ## Beginning error (25%)
+  data[, "hausD75"] <- 0 ## Ending error (75%)
+  data[,"hausDmiddle"] <- 0 ## H_d from the middle (15% to 85%)
+  data[,"hausDmiddlet"] <- 0 ## Middle H_d(15% to 85%) weighted by time to completion
+
+  
+  
+  # create an empty dataframe to be used later
+  new.tr.level <- data[0,]
+  
+  new.tr.level <- new.tr.level %>% 
+    dplyr::select(-c(t,time,x,y,x_scf,y_scf,x_scc,y_scc,d_t,v_i,rv_i,av_i))
+  
+  ct <- 0 ## Intialize count to be used in the trial level
+  
+  ## factor levels of patient ID
+  p.id <- levels(factor(data$patient_id))
+  
+  for (id in p.id) {
+    patient_data <- subset(data, patient_id==id) ## select a single patient
+    n.test <- levels(factor(patient_data$ntest_date))
+    for (tn in n.test) {
+      test_date <- subset(patient_data, ntest_date==tn) ## select one test date
+      d.levels <- levels(factor(test_date$difficulty_level))
+      for (dl in d.levels) {
+        d.level <- subset(test_date, difficulty_level==dl) ## select difficulty level
+        tr.levels <- levels(factor(d.level$trial_id))
+        #ct <- 0 ## Intialize count to be used in the trial level
+        for (tr in tr.levels){
+          
+          tr.level <- subset(d.level, trial_id==tr) ## select trial_id
+          dim_tr <- dim(tr.level)[1] ## Make sure the dimension of each trial > 2
+          if (dim_tr>2){
+            
+            ct = ct + 1 ## start a count for increment
+           #print(ct) ## to check the loop is working fine 
+            
+            ## Get the drawing and reference data
+            dat <- HausD_dataframe(tr.level, xs, ys)$drawing_df$data
+            ref_dat <- HausD_dataframe(tr.level, xs, ys)$ref_df$data
+            ## Get the total time use to complete th drawing
+            time_n <- tr.level$time[dim_tr]
+            
+            ## Subset data from begining 25%, ending 75%, and middle 15%-85%
+            dat25 <- fdata(dat[1:round(dim_tr*0.25),])
+            dat75 <- fdata(dat[round(dim_tr*0.75):dim_tr,])
+            dat15_85 <- fdata(dat[round(dim_tr*0.15):round(dim_tr*0.85),])
+            
+            ref_dat25 <- fdata(ref_dat[1:round(dim_tr*0.25),])
+            ref_dat75 <- fdata(ref_dat[round(dim_tr*0.75):dim_tr,])
+            ref_dat15_85 <- fdata(ref_dat[round(dim_tr*0.15):round(dim_tr*0.85),])
+            
+            
+            #### Calculate the different metrics
+            tr.level[ct,"hausD"] <- max(metric.hausdorff(fdata(dat),fdata(ref_dat)),
+                                         na.rm = TRUE)
+            tr.level[ct,"hausDError"] <- sum(metric.hausdorff(fdata(dat),fdata(ref_dat)),
+                                         na.rm = TRUE)
+            tr.level[ct,"hausDt"] <- max(metric.hausdorff(fdata(dat),fdata(ref_dat)),
+                                         na.rm = TRUE)/time_n
+            tr.level[ct,"hausDIqr"] <- IQR(metric.hausdorff(fdata(dat),fdata(ref_dat)),
+                                         na.rm = TRUE)
+            tr.level[ct,"hausD25"] <- max(metric.hausdorff(dat25,ref_dat25), na.rm = TRUE)
+            tr.level[ct,"hausD75"] <- max(metric.hausdorff(dat75,ref_dat75), na.rm = TRUE)
+            tr.level[ct,"hausDmiddle"] <- max(metric.hausdorff(dat15_85,ref_dat15_85), 
+                                              na.rm = TRUE)
+            tr.level[ct,"hausDmiddlet"] <- max(metric.hausdorff(dat15_85,ref_dat15_85), 
+                                              na.rm = TRUE)/time_n
+            
+            ## Remove some variables and take first row only
+            tr.level <- tibble::as_tibble(tr.level) %>% 
+              dplyr::select(-c(t,time,x,y,x_scf,y_scf,x_scc,y_scc,d_t,v_i,rv_i,av_i)) %>%
+              group_by(patient_id, ntest_date, difficulty_level, trial_id) %>% 
+              slice(1)
+            
+            tr.level <- as.data.frame(tr.level) ## convert to data.frame
+            
+            new.tr.level <- rbind(new.tr.level, tr.level) ## append the data
+             
+          }
+        }
+      }
+    }
+  }
+  
+  return(as.data.frame(new.tr.level))  
+}
+
+
+```
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+#### calculate data frame with hausdorff distance metrics
+
+# ## Coordinates x and y
+# ptm <- proc.time() ## Take 56.85 min
+# ms_data.hausD_xy <- HausData_func(ms_data4, "x", "y")
+# proc.time() - ptm
+# # 
+# # write.csv(ms_data.hausD_xy, file = "ms_data.hausD_xy.csv")
+# 
+# 
+# ## Coordinates x_scf and y_scf
+# ptm <- proc.time() ## Take 59 min
+# ms_data.hausD_xscf <- HausData_func(ms_data4, "x_scf", "y_scf")
+# proc.time() - ptm
+# 
+# 
+# write.csv(ms_data.hausD_xscf, file = "ms_data.hausD_xscf.csv")
+
+
+## Coordinates x_scc and y_scc
+ptm <- proc.time() ## Take 59 min
+ms_data.hausD_xscc <- HausData_func(ms_data4, "x_scc", "y_scc")
+proc.time() - ptm
+# 
+# 
+# write.csv(ms_data.hausD_xscc, file = "ms_data.hausD_xscc.csv")
+```
+
+
+
+
+## Approximate Entropy (ApEn)
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+### Approximate Entropy (ApEn)
+## Interpolate all v_i, r_vi, av_i over a fixed length L = 500 (see similar approach in Creagh et al., 2020) and calculate their entropy 
+ms_data.apen <- ms_data4 %>% 
+   group_by(patient_id,ntest_date,difficulty_level, trial_id) %>%
+  summarise(v_apen = ApEn(spline(v_i, n = 500)$y), 
+            rv_apen = ApEn(spline(rv_i, n = 500)$y), 
+            av_apen = ApEn(spline(av_i, n = 500)$y))
+
+
+p1.apen <- subset(ms_data.apen, patient_id=="NIB632" & ntest_date=="1")
+p1.apen <- p1.apen %>% select(patient_id, difficulty_level, v_apen)
+p1.apen$difficulty_level <- as.factor(p1.apen$difficulty_level)
+  
+#+++++++++++++++++++++++++
+# Function to calculate the mean and the standard deviation
+  # for each group
+#+++++++++++++++++++++++++
+# data : a data frame
+# varname : the name of a column containing the variable
+  #to be summariezed
+# groupnames : vector of column names to be used as
+  # grouping variables
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+ return(data_sum)
+}
+
+####
+
+p1.apen.sum <- data_summary(p1.apen, "v_apen", "difficulty_level")
+  
+ggplot(p1.apen.sum, aes(x=difficulty_level, y=v_apen)) + 
+    geom_bar(stat="identity", color="black", colour = "gray", width = 0.5, 
+           position=position_dodge()) +
+  labs(x = "Difficulty Levels", y = "Approximate Speed Entropy") +
+    geom_errorbar(aes(ymin=v_apen-sd, ymax=v_apen+sd), width=.2, size = 0.9,
+                  position=position_dodge(0.05))+ theme_bw() + Nice.Label
+
+
+###
+
+```
+
