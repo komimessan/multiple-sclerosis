@@ -55,8 +55,6 @@ HausData_func <- function(data, xs, ys){
   new.tr.level <- new.tr.level %>% 
     dplyr::select(-c(t,time,x,y,x_scf,y_scf,x_scc,y_scc,d_t,v_i,rv_i,av_i))
   
-  ct <- 0 ## Intialize count to be used in the trial level
-  
   ## factor levels of patient ID
   p.id <- levels(factor(data$patient_id))
   
@@ -71,12 +69,11 @@ HausData_func <- function(data, xs, ys){
         tr.levels <- levels(factor(d.level$trial_id))
         #ct <- 0 ## Intialize count to be used in the trial level
         for (tr in tr.levels){
-          
           tr.level <- subset(d.level, trial_id==tr) ## select trial_id
           dim_tr <- dim(tr.level)[1] ## Make sure the dimension of each trial > 2
           if (dim_tr>2){
             
-            ct = ct + 1 ## start a count for increment
+            #ct = ct + 1 ## start a count for increment
            #print(ct) ## to check the loop is working fine 
             
             ## Get the drawing and reference data
@@ -96,20 +93,22 @@ HausData_func <- function(data, xs, ys){
             
             
             #### Calculate the different metrics
-            tr.level[ct,"hausD"] <- max(metric.hausdorff(fdata(dat),fdata(ref_dat)),
-                                         na.rm = TRUE)
-            tr.level[ct,"hausDError"] <- sum(metric.hausdorff(fdata(dat),fdata(ref_dat)),
-                                         na.rm = TRUE)
-            tr.level[ct,"hausDt"] <- max(metric.hausdorff(fdata(dat),fdata(ref_dat)),
-                                         na.rm = TRUE)/time_n
-            tr.level[ct,"hausDIqr"] <- IQR(metric.hausdorff(fdata(dat),fdata(ref_dat)),
-                                         na.rm = TRUE)
-            tr.level[ct,"hausD25"] <- max(metric.hausdorff(dat25,ref_dat25), na.rm = TRUE)
-            tr.level[ct,"hausD75"] <- max(metric.hausdorff(dat75,ref_dat75), na.rm = TRUE)
-            tr.level[ct,"hausDmiddle"] <- max(metric.hausdorff(dat15_85,ref_dat15_85), 
-                                              na.rm = TRUE)
-            tr.level[ct,"hausDmiddlet"] <- max(metric.hausdorff(dat15_85,ref_dat15_85), 
-                                              na.rm = TRUE)/time_n
+            tr.level[tr.level$trial_id==tr,"hausD"] <- 
+              max(metric.hausdorff(fdata(dat),fdata(ref_dat)), na.rm = TRUE)
+            tr.level[tr.level$trial_id==tr,"hausDError"] <- 
+              sum(metric.hausdorff(fdata(dat),fdata(ref_dat)),na.rm = TRUE)
+            tr.level[tr.level$trial_id==tr,"hausDt"] <-
+              max(metric.hausdorff(fdata(dat),fdata(ref_dat)),na.rm = TRUE)/time_n
+            tr.level[tr.level$trial_id==tr,"hausDIqr"] <-
+              IQR(metric.hausdorff(fdata(dat),fdata(ref_dat)),na.rm = TRUE)
+            tr.level[tr.level$trial_id==tr,"hausD25"] <- 
+              max(metric.hausdorff(dat25,ref_dat25), na.rm = TRUE)
+            tr.level[tr.level$trial_id==tr,"hausD75"] <- 
+              max(metric.hausdorff(dat75,ref_dat75), na.rm = TRUE)
+            tr.level[tr.level$trial_id==tr,"hausDmiddle"] <-
+              max(metric.hausdorff(dat15_85,ref_dat15_85), na.rm = TRUE)
+            tr.level[tr.level$trial_id==tr,"hausDmiddlet"] <-
+              max(metric.hausdorff(dat15_85,ref_dat15_85), na.rm = TRUE)/time_n
             
             ## Remove some variables and take first row only
             tr.level <- tibble::as_tibble(tr.level) %>% 
@@ -135,25 +134,31 @@ HausData_func <- function(data, xs, ys){
 
 
 
+
+
+
+
+
+
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
 #### calculate data frame with hausdorff distance metrics
 
-# ## Coordinates x and y
-# ptm <- proc.time() ## Take 56.85 min
-# ms_data.hausD_xy <- HausData_func(ms_data4, "x", "y")
-# proc.time() - ptm
-# # 
-# # write.csv(ms_data.hausD_xy, file = "ms_data.hausD_xy.csv")
-# 
-# 
-# ## Coordinates x_scf and y_scf
-# ptm <- proc.time() ## Take 59 min
-# ms_data.hausD_xscf <- HausData_func(ms_data4, "x_scf", "y_scf")
-# proc.time() - ptm
-# 
-# 
-# write.csv(ms_data.hausD_xscf, file = "ms_data.hausD_xscf.csv")
+## Coordinates x and y
+ptm <- proc.time() ## Take 56.85 min
+ms_data.hausD_xy <- HausData_func(ms_data4, "x", "y")
+proc.time() - ptm
+#
+write.csv(ms_data.hausD_xy, file = "ms_data.hausD_xy.csv")
+
+
+## Coordinates x_scf and y_scf
+ptm <- proc.time() ## Take 59 min
+ms_data.hausD_xscf <- HausData_func(ms_data4, "x_scf", "y_scf")
+proc.time() - ptm
+
+
+write.csv(ms_data.hausD_xscf, file = "ms_data.hausD_xscf.csv")
 
 
 ## Coordinates x_scc and y_scc
@@ -162,7 +167,8 @@ ms_data.hausD_xscc <- HausData_func(ms_data4, "x_scc", "y_scc")
 proc.time() - ptm
 # 
 # 
-# write.csv(ms_data.hausD_xscc, file = "ms_data.hausD_xscc.csv")
+write.csv(ms_data.hausD_xscc, file = "ms_data.hausD_xscc.csv")
+
 ```
 
 
