@@ -89,7 +89,7 @@ veclocity_func <- function(data, xs, ys){
 # # write.csv(ms_data4, file = "new_spiral.csv")
 # 
 # ## The code to calculate v, rv, and av take long so the data was saved to be used later
-# ms_data4 <- read.csv("new_spiral.csv", header = TRUE)
+ms_data4 <- read.csv("new_spiral.csv", header = TRUE)
 
 ```
 
@@ -234,7 +234,7 @@ ms_data.sum <- ms_data4 %>%
   summarise(v_sum = sum(v_i, na.rm = TRUE), v_cv = cv(v_i), 
             v_sk = skewness(v_i, na.rm = TRUE), v_kt = kurtosis(v_i, na.rm = TRUE), 
             rv_sum = sum(rv_i, na.rm = TRUE), rv_cv = cv(rv_i), 
-            rv_sk = skewness(rv_i, na.rm = TRUE), na.rm = TRUE, rv_kt = kurtosis(rv_i),
+            rv_sk = skewness(rv_i, na.rm = TRUE), rv_kt = kurtosis(rv_i, na.rm = TRUE),
             av_sum = sum(av_i,na.rm = TRUE), av_cv = cv(av_i), 
             av_sk = skewness(av_i, na.rm = TRUE), av_kt = kurtosis(av_i, na.rm = TRUE))
 
@@ -263,28 +263,32 @@ ms_data.psd <- ms_data4 %>%
 ### Power vs. frequency plot
 ## Create the data frame by filtering and calculating the power
 
-p11_sub1 <- subset(p11_sub, difficulty_level == "Difficulty Level 1")
-p11_sub2 <- subset(p11_sub, difficulty_level == "Difficulty Level 2")
-p11_sub3 <- subset(p11_sub, difficulty_level == "Difficulty Level 3")
+# p11_sub1 <- subset(p11_sub, difficulty_level == "Difficulty Level 1")
+# p11_sub2 <- subset(p11_sub, difficulty_level == "Difficulty Level 2")
+# p11_sub3 <- subset(p11_sub, difficulty_level == "Difficulty Level 3")
+# 
+# psd_df1 <- data.frame(difficulty_level = "Difficulty Level 1",
+#                       pwelch_func(filter_func(p11_sub1$v_i, p11_sub1$time, 8)))
+# psd_df2 <- data.frame(difficulty_level = "Difficulty Level 2",
+#                       pwelch_func(filter_func(p11_sub2$v_i, p11_sub2$time, 8)))
+# psd_df3 <- data.frame(difficulty_level = "Difficulty Level 3",
+#                       pwelch_func(filter_func(p11_sub3$v_i, p11_sub3$time, 8)))
+# 
+# psd_df <- rbind(psd_df1,psd_df2,psd_df3) ## row bind psd for all difficulty levels
+# 
+# ggplot(psd_df, aes(x =freq,spec))+
+#   geom_point(size  = 2.0)+
+#   geom_line(size = 0.9) +
+#   facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+#   labs(x = "Frequency (Hz)", y = expression("Power (Pixels/s) "^2)) + 
+#   theme_bw()+Nice.Label 
 
-psd_df1 <- data.frame(difficulty_level = "Difficulty Level 1",
-                      pwelch_func(filter_func(p11_sub1$v_i, p11_sub1$time, 8)))
-psd_df2 <- data.frame(difficulty_level = "Difficulty Level 2",
-                      pwelch_func(filter_func(p11_sub2$v_i, p11_sub2$time, 8)))
-psd_df3 <- data.frame(difficulty_level = "Difficulty Level 3",
-                      pwelch_func(filter_func(p11_sub3$v_i, p11_sub3$time, 8)))
 
-psd_df <- rbind(psd_df1,psd_df2,psd_df3) ## row bind psd for all difficulty levels
-
-ggplot(psd_df, aes(x =freq,spec))+
-  geom_point(size  = 2.0)+
-  geom_line(size = 0.9) +
-  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
-  labs(x = "Frequency (Hz)", y = expression("Power (Pixels/s) "^2)) + 
-  theme_bw()+Nice.Label 
+```
 
 
 
+```{r  message=FALSE, warning=FALSE, include=FALSE}
 
 ### "NIB657"    "NIB659"    "NIB661"    "NIB662"    "NIB663"    "NIB664"    "PATIENT10" 
 ##"NDS688"    "NDS689"    "NDS690"    "NDS691"    "NDS692"    "NDS693"    "NDS694"    "NDS696"
@@ -382,6 +386,59 @@ ggplot(ms_dist.var, aes(x=dist_var)) +
   facet_wrap(~difficulty_level, nrow = 1, scales = "free") +
   labs(x = "Variance of Euclidean Distance by Patient", y = "Count") +
   theme_bw() + Nice.Label
+####
+
+## https://slowkow.com/notes/ggplot2-color-by-density/
+get_density <- function(x, y, ...) {
+  dens <- MASS::kde2d(x, y, ...)
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+
+
+x_dat <- cut(p1111$x,50)
+y_dat <- cut(p1111$y,50)
+time <- p1111$time
+dat <- data.frame(x=x_dat,y=y_dat,time=time)
+
+dat <- expand.grid(x = x_dat, y= y_dat)
+dat <- matrix(dat, ncol = 50)
+
+dat <- data.frame(x = p1111$x, y = p1111$y, time)
+
+
+
+
+ggplot(dat, aes(x,y)) +
+  geom_raster(aes(fill = after_stat(time)),interpolate = TRUE, hjust = 0, vjust = 0) +
+  scale_fill_distiller("Time [s]", palette = "RdYlBu", direction = -1) +
+  #viridis::scale_fill_viridis("Time [s]", discrete = FALSE) +
+  theme_bw(base_size = 18) +
+   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), 
+         axis.ticks.x=element_blank(),axis.title.y=element_blank(), 
+         axis.text.y=element_blank(), axis.ticks.y=element_blank(), 
+         panel.background = element_rect(fill = "blue",
+                                colour = "blue", 
+                                size = 0.5, linetype = "solid"),
+         panel.grid.major = element_line(size = 0.5, linetype = 'solid',
+                                colour = "black"),
+         legend.key.height = unit(2.1, "cm")) 
+  
+
+p <- ggplot(dat, aes(x, y, fill = time)) +
+  stat_bin_2d(bins = 50, drop = FALSE) +
+  scale_fill_distiller("Time [s]", palette = "RdYlBu", direction = -1) +
+  theme_bw(base_size = 18) +
+   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), 
+         axis.ticks.x=element_blank(),axis.title.y=element_blank(), 
+         axis.text.y=element_blank(), axis.ticks.y=element_blank(), 
+         panel.grid.major = element_line(size = 0.5, linetype = 'solid',
+                                colour = "black"),
+         legend.key.height = unit(2.1, "cm")) 
+
+ggplot_build(p)$data[[1]]$count
 
 ```
 

@@ -17,6 +17,12 @@ library(tidyr) ## v. 1.1.0 ## for gather and wide
 library(VennDiagram) ## v.1.6.20 ## Venn diagram 
 library(forecast) ## v. 8.13 ## for outlier detection https://cran.r-project.org/web/packages/forecast/forecast.pdf
 library(fda.usc) ## v. 2.0.2
+library(pathmapping) ## v. 1.0.2 ## For Area Under two curves ##https://cran.r-project.org/web/packages/pathmapping/pathmapping.pdf
+library(DescTools) ## v. 0.99.38 ## ## For trapezoid rule https://www.rdocumentation.org/packages/DescTools/versions/0.99.37
+library(SpatEntropy) ##v.0.1.0 ## For Image Entropy ## https://cran.r-project.org/web/packages/SpatEntropy/SpatEntropy.pdf
+library(raster) ## v. 3.3.13 ## to create a grid of x y, coordinates of z values
+library(corrplot) ##v.0.84 ## for correlation matrix plot
+library(Hmisc) ## v.4.4.0 ## to calculate matrix of correlation and pvalue
 ```
 
 
@@ -174,7 +180,7 @@ merge_func <- function(cl_ms, cl_data, ms_data){
   cl_hv_other <- subset(cl_data, diagnosis_group=="HV" | diagnosis_group=="Others")
   
   ## Combine clinical MS patient with other disease and healthy volunteers
-  cl_ms <- cl_ms %>% select(-c(id)) ## remove id column before rbind
+  cl_ms <- cl_ms %>% dplyr::select(-c(id)) ## remove id column before rbind
   cl_ms_hv_other <- rbind(cl_ms, cl_hv_other)
   
   ## Change the format of the test dates and check difference between test dates (app and neuro)
@@ -228,9 +234,9 @@ outlier_func <- function(dataframe){
   outlier_index <- tsoutliers(data_with_id$y, lambda = "auto")$index
   
   if (length(outlier_index) == 0){
-    new_data = data_with_id %>% select(-id)
+    new_data = data_with_id %>% dplyr::select(-id)
   } else {
-    new_data = data_with_id %>% dplyr::filter(id != outlier_index) %>% select(-id)
+    new_data = data_with_id %>% dplyr::filter(id != outlier_index) %>% dplyr::select(-id)
   }
   return(new_data)
 }

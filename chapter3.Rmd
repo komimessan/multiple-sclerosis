@@ -137,41 +137,384 @@ HausData_func <- function(data, xs, ys){
 
 
 
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+# #### calculate data frame with hausdorff distance metrics
+# 
+# ## Coordinates x and y
+# ptm <- proc.time() ## Take 56.85 min
+# ms_data.hausD_xy <- HausData_func(ms_data4, "x", "y")
+# proc.time() - ptm
+# #
+# write.csv(ms_data.hausD_xy, file = "ms_data.hausD_xy.csv")
+# 
+# 
+# ## Coordinates x_scf and y_scf
+# ptm <- proc.time() ## Take 59 min
+# ms_data.hausD_xscf <- HausData_func(ms_data4, "x_scf", "y_scf")
+# proc.time() - ptm
+# 
+# 
+# write.csv(ms_data.hausD_xscf, file = "ms_data.hausD_xscf.csv")
+# 
+# 
+# ## Coordinates x_scc and y_scc
+# ptm <- proc.time() ## Take 59 min
+# ms_data.hausD_xscc <- HausData_func(ms_data4, "x_scc", "y_scc")
+# proc.time() - ptm
+# # 
+# # 
+# write.csv(ms_data.hausD_xscc, file = "ms_data.hausD_xscc.csv")
+
+ms_data.hausD_xy <- read.csv("ms_data.hausD_xy.csv", header = TRUE)
+ms_data.hausD_xscf <- read.csv("ms_data.hausD_xscf.csv", header = TRUE)
+ms_data.hausD_xscc <- read.csv("ms_data.hausD_xscc.csv", header = TRUE)
+```
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+dl <- c("Difficulty Level 1", "Difficulty Level 2", "Difficulty Level 3")
+ms_data.hausD_xy$difficulty_level <- factor(ms_data.hausD_xy$difficulty_level, labels = dl)
+ms_data.hausD_xscf$difficulty_level <- factor(ms_data.hausD_xscf$difficulty_level, labels = dl)
+ms_data.hausD_xscc$difficulty_level <- factor(ms_data.hausD_xscf$difficulty_level, labels = dl)
+
+p_group <- "Others"
+##### Plot density of the Hausdorff distances Error
+## raw drawing
+ggplot(data = subset(ms_data.hausD_xy, diagnosis_group == p_group), aes(x = hausDError)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  geom_vline(data = plyr::ddply(subset(ms_data.hausD_xy, diagnosis_group == p_group),
+                     "difficulty_level", summarize, m.error= mean(hausDError)), 
+             aes(xintercept = m.error), color="blue", linetype="dashed", size=1.2) +
+  facet_wrap(~difficulty_level, scales = "free_y", nrow = 3) +
+  #scale_x_continuous(labels = scales::scientific) +
+  labs(x = "HausDError", y = "Count") + 
+  theme_bw() + Nice.Label
+
+## Normalized by first point rule
+ggplot(data = subset(ms_data.hausD_xscf,diagnosis_group == p_group), aes(x = hausDError)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  geom_vline(data = plyr::ddply(subset(ms_data.hausD_xy, diagnosis_group == p_group),
+                     "difficulty_level", summarize, m.error= mean(hausDError)), 
+             aes(xintercept = m.error), color="blue", linetype="dashed", size=1.2) +
+  facet_wrap(~difficulty_level, scales = "free_y", nrow = 3) +
+  labs(x = "HausDError", y = "Count") + 
+  theme_bw() + Nice.Label
+
+## spiral normalized drawing using center rule
+ggplot(data = subset(ms_data.hausD_xscc, diagnosis_group == p_group), aes(x = hausDError)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  geom_vline(data = plyr::ddply(subset(ms_data.hausD_xy, diagnosis_group == p_group),
+                     "difficulty_level", summarize, m.error= mean(hausDError)), 
+             aes(xintercept = m.error), color="blue", linetype="dashed", size=1.2) +
+  facet_wrap(~difficulty_level, scales = "free_y", nrow = 3) +
+  labs(x = "HausDError", y = "Count") + 
+  theme_bw() + Nice.Label
+
+```
+
+
+
+## Drawing Error using Trapezoidal method and 2D MSE/RMSE
+
+Here we calculated two different type of errors. The first error was calculated using the trapezoidal rule to integrate over the two spiral regions. The error was calculated by finding the intersection of the two spiral region such as the difference between the two area. We first note from [Aghanavesi et al., 2017](https://www.sciencedirect.com/science/article/pii/S2352914817300230) that the trapezoidal formula is
+$$\int_{x_n}^{x_{n+1}} f(x) dx = \frac{b-a}{2N}\sum_{n=1}^{N}[f(x_n)-f(x_{n+1})]$$
+where $N$ is the total number of points and $\frac{b-a}{2}$ is the spacing between the points. Suppose the reference spiral and the patients spiral are denoted by the functions $f_{ref}(x,y)$ and $f_{pat}(x,y)$ respectively. Then the error based on the trapezoidal rule becomes
+$$Error = \left| \int_{x_n}^{x_{n+1}} f_{ref}(x) dx - \int_{x_n}^{x_{n+1}} f_{pat}(x) dx \right|$$
+where $|.|$ is the abosulte value of the difference between the two Area Under the Curve (AUC). We now proceed with the second type of errors.
+
+
+The Mean-Squared Error (MSE) between two images $f_{ref}(x,y)$ (reference image) and $f_{pat}(x,y)$ can be described as follow from [website](http://homepages.inf.ed.ac.uk/rbf/CVonline/LOCAL_COPIES/VELDHUIZEN/node18.html) and [Asamoah et al., 2018](https://www.ijcaonline.org/archives/volume181/number22/asamoah-2018-ijca-917899.pdf):
+
+$$MSE = \frac{1}{M\times N}\sum_{n=1}^{M}\sum_{m=1}^{N}\left[f_{ref}(x,y) - f_{pat}(x,y)\right]^2$$ 
+
+where $M$ and $N$ are the width and height of the images. In our case, we are in 2-D and thus $N=2$ while $M$ varies according to the trial level. We first use Spline interpolation to get the reference image to the same length as the patient drawing. 
+
+We also calculated ``center of the shoot" as the Euclidean distance by which the touch coordinates misses the centre of the shape following the formula:
+
+$$Center_{Sh}((x_1,y_1),(x_2,y_2)) = \sqrt{(x_1-x_2)^2 + (y_1-y_2)^2}$$
+
+
+We continued by calculating the correlation coefficient using the following 2D correlation coefficient formula from [Aljanabi et al., 2018](https://www.hindawi.com/journals/mpe/2018/9801308/):
+
+$$r = \frac{\sum_{m=1}^{M}\sum_{n=1}^{N} (A_{MN} - \bar{A})(B_{MN} - \bar{B})}{\sqrt{\left(\sum_{m=1}^{M}\sum_{n=1}^{N} (A_{MN} - \bar{A})^2\right)\left(\sum_{m=1}^{M}\sum_{n=1}^{N} (B_{MN} - \bar{B})^2\right)}}$$
+where $A_{MN}$ and $B_{MN}$ are the image coordinates points with dimension $M\times 2$ given that we have $x$ and $y$ coordinate. $\bar{A} = \frac{\sum_{i}x_i +\sum_{i}y_i}{2M}$ and $\bar{B}$ following similar formula are the image mean.
 
 
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
-#### calculate data frame with hausdorff distance metrics
+## Function to calculate area under the curve using trapezoidal rule
 
-## Coordinates x and y
-ptm <- proc.time() ## Take 56.85 min
-ms_data.hausD_xy <- HausData_func(ms_data4, "x", "y")
-proc.time() - ptm
-#
-write.csv(ms_data.hausD_xy, file = "ms_data.hausD_xy.csv")
+####
 
+Error_func <- function(data, xs, ys){
+  ## data is the entire dataset with x and y scaled
+  ## xs is the x coordinates to use (either x_scf or x_scc)
+  ## ys is the y coordinates to use (either y_scf or y_scc)
+  
+  #### intialize an empty 0 column
+  data[,"ErrAUC"] <- 0 ##  AUC error
+  data[,"MSE"] <- 0 ##  MSE
+  data[,"RMSE"] <- 0 ##  RMSE
+  data[, "Center_Sh"] <- 0 ## Center of Shoot
+  data[,"t_final"] <- 0 ## time taken to complete the drawing
+  data[,"total_asym"] <- 0 ## total asymmetry
+  data[,"true_asym"] <- 0 #3 difference between patient and reference asymmetry
+  data[,"Corr"] <- 0 ## 2D cross-correlation between the two images
+  
 
-## Coordinates x_scf and y_scf
-ptm <- proc.time() ## Take 59 min
-ms_data.hausD_xscf <- HausData_func(ms_data4, "x_scf", "y_scf")
-proc.time() - ptm
+  
+  
+  # create an empty dataframe to be used later
+  new.tr.level <- data[0,]
+  
+  new.tr.level <- new.tr.level %>% 
+    dplyr::select(-c(t,time,x,y,x_scf,y_scf,x_scc,y_scc,d_t,v_i,rv_i,av_i))
+  
+  ## factor levels of patient ID
+  p.id <- levels(factor(data$patient_id))
+  
+  for (id in p.id) {
+    patient_data <- subset(data, patient_id==id) ## select a single patient
+    n.test <- levels(factor(patient_data$ntest_date))
+    for (tn in n.test) {
+      test_date <- subset(patient_data, ntest_date==tn) ## select one test date
+      d.levels <- levels(factor(test_date$difficulty_level))
+      for (dl in d.levels) {
+        d.level <- subset(test_date, difficulty_level==dl) ## select difficulty level
+        tr.levels <- levels(factor(d.level$trial_id))
+        for (tr in tr.levels){
+          tr.level <- subset(d.level, trial_id==tr) ## select trial_id
+          dim_tr <- dim(tr.level)[1] ## Make sure the dimension of each trial > 2
+          if (dim_tr>2){
+            
+            ## generate the reference spiral
+            appendage <- tr.level$appendage[1]
+            dl <- tr.level$difficulty_level[1]
+            spiral_dl <- GenerateSpiral(appendage,dl)
+            
+            ## Create a spline interpolation to the length of tr.level
+            x_ref <- spline(spiral_dl$x, n = dim_tr)$y
+            y_ref <- spline(spiral_dl$y, n = dim_tr)$y
+            ## Extract x and y coordinate of the patients drawing
+            x_pat <- tr.level[, xs]
+            y_pat <- tr.level[, ys]
+            
+            ## Center of reference point
+            x_ref0 <- x_ref[1]
+            y_ref0 <- y_ref[1]
+            ## Center of patient drawing
+            if (tr.level[1, ys] > tr.level[dim_tr, ys]){
+              x_pat0 <- tr.level[dim_tr, xs]
+              y_pat0 <- tr.level[dim_tr, xs]
+            } else if (tr.level[1, ys] < tr.level[dim_tr, ys]) {
+              x_pat0 <- tr.level[1, xs]
+              y_pat0 <- tr.level[1, xs]
+            } else {
+              x_pat0 <- 0
+              y_pat0 <- 0
+             }
 
+            
+            ## Calculate the Area under the curve
+            AUC_ref <- AUC(x = x_ref, y = y_ref, method = "trapezoid")
+            AUC_patient <- AUC(x = x_pat, y = y_pat, method = "trapezoid")
+            
+            ## Calculate the sum of square in x and y coordinates
+            x_sq <- sum((x_ref-x_pat)^2, na.rm = TRUE)
+            y_sq <- sum((y_ref-y_pat)^2, na.rm = TRUE)
+            
+            ## Reference and patient asymmetry
+            ref_asym <- 
+              abs(abs(min(x_ref)) - abs(max(x_ref)))/(abs(min(x_ref)) + abs(max(x_ref))) +
+              abs(abs(min(y_ref)) - abs(max(y_ref)))/(abs(min(y_ref)) + abs(max(y_ref)))
+            pat_asym <- 
+              abs(abs(min(x_pat)) - abs(max(x_pat)))/(abs(min(x_pat)) + abs(max(x_pat))) +
+              abs(abs(min(y_pat)) - abs(max(y_pat)))/(abs(min(y_pat)) + abs(max(y_pat)))
+            
+            ### Correlation metrics
+            ## get the reference and patient matrix of x and y coordinates
+            mat_ref <- as.matrix(data.frame(x_ref,y_ref))
+            mat_pat <- as.matrix(data.frame(x_pat,y_pat))
+            
+            ## calculate the mean of the coordinates in both matrix
+            m_ref_mean <- mean(as.vector(mat_ref), na.rm = TRUE)
+            m_pat_mean <- mean(as.vector(mat_pat), na.rm = TRUE)
+            
+            #calculate the numerator of the correlation coefficient
+            r_num <-sum((mat_ref - m_ref_mean)*(mat_pat - m_pat_mean), na.rm = TRUE)
+            # calculate the denominator parts under the quareroot
+            r_denom <- sum((mat_ref - m_ref_mean)^2, na.rm = TRUE)*sum(
+              (mat_pat - m_pat_mean)^2, na.rm = TRUE) 
+            
+            
+            
+              
 
-write.csv(ms_data.hausD_xscf, file = "ms_data.hausD_xscf.csv")
+            
+            #### Calculate the different metrics
+            tr.level[tr.level$trial_id==tr,"ErrAUC"] <- abs(AUC_ref - AUC_patient)
+            tr.level[tr.level$trial_id==tr,"MSE"] <- 
+              sum(x_sq, y_sq, na.rm = TRUE)/(2*dim_tr) ## 2 for x and y
+            tr.level[tr.level$trial_id==tr,"RMSE"] <- 
+              sqrt(sum(x_sq, y_sq, na.rm = TRUE)/(2*dim_tr))
+            tr.level[tr.level$trial_id==tr,"Center_Sh"] <- 
+              sqrt((x_ref0 - x_pat0)^ 2 + (y_ref0 - y_pat0)^2)
+            tr.level[tr.level$trial_id==tr,"t_final"] <- tr.level$time[dim_tr]
+            tr.level[tr.level$trial_id==tr,"total_asym"] <- pat_asym
+            tr.level[tr.level$trial_id==tr,"true_asym"] <- abs(pat_asym - ref_asym)
+            tr.level[tr.level$trial_id==tr, "Corr"] <- r_num/sqrt(r_denom)
 
+            
+            ## Remove some variables and take first row only
+            tr.level <- tibble::as_tibble(tr.level) %>% 
+              dplyr::select(-c(t,time,x,y,x_scf,y_scf,x_scc,y_scc,d_t,v_i,rv_i,av_i)) %>%
+              group_by(patient_id, ntest_date, difficulty_level, trial_id) %>% 
+              slice(1)
+            
+            tr.level <- as.data.frame(tr.level) ## convert to data.frame
+            
+            new.tr.level <- rbind(new.tr.level, tr.level) ## append the data
+             
+          }
+        }
+      }
+    }
+  }
+  
+  return(as.data.frame(new.tr.level))  
+}
 
-## Coordinates x_scc and y_scc
-ptm <- proc.time() ## Take 59 min
-ms_data.hausD_xscc <- HausData_func(ms_data4, "x_scc", "y_scc")
-proc.time() - ptm
-# 
-# 
-write.csv(ms_data.hausD_xscc, file = "ms_data.hausD_xscc.csv")
 
 ```
 
 
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+#### calculate data frame with Area Under the curve
+
+## Coordinates x and y
+ptm <- proc.time() ## Take 2.933 min
+ms_data.Error_xy <- Error_func(ms_data4, "x", "y")
+proc.time() - ptm
+#
+
+
+## Coordinates x_scf and y_scf
+ptm <- proc.time() ## Take 2.98 min
+ms_data.Error_xscf <- Error_func(ms_data4, "x_scf", "y_scf")
+proc.time() - ptm
+
+
+## Coordinates x_scc and y_scc
+ptm <- proc.time() ## Take 2.78 min
+ms_data.Error_xscc <- Error_func(ms_data4, "x_scc", "y_scc")
+proc.time() - ptm
+#
+
+```
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+
+## Plot AUC Error
+
+ms_data.Error_xy$difficulty_level <- factor(ms_data.Error_xy$difficulty_level, labels = dl)
+ms_data.Error_xscf$difficulty_level <- factor(ms_data.Error_xscf$difficulty_level, labels = dl)
+ms_data.Error_xscc$difficulty_level <- factor(ms_data.Error_xscf$difficulty_level, labels = dl)
+
+##### Plot density of the AUC Error
+## raw drawing
+ggplot(data = ms_data.Error_xy, aes(x = ErrAUC)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Drawing Error Using AUC", y = "Count") + 
+  theme_bw() + Nice.Label
+
+## Normalized by first point rule
+ggplot(data = ms_data.Error_xscf, aes(x = ErrAUC)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Drawing Error Using AUC", y = "Count") + 
+  theme_bw() + Nice.Label
+
+## spiral normalized drawing using center rule
+ggplot(data = ms_data.Error_xscc, aes(x = ErrAUC)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Drawing Error Using AUC", y = "Count") + 
+  theme_bw() + Nice.Label
+
+
+## Ground truth data--9HPT average
+ggplot(data = ms_data.Error_xscc, aes(x = X9HPT.Avg)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "9HPT Average", y = "Count") + 
+  theme_bw() + Nice.Label
+
+```
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+
+#### Plot MSE Error
+## raw drawing
+ggplot(data = ms_data.Error_xy, aes(x = MSE)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Mean Square Error", y = "Count") + 
+  theme_bw() + Nice.Label
+
+## Normalized by first point rule
+ggplot(data = ms_data.Error_xscf, aes(x = MSE)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Mean Square Error", y = "Count") + 
+  theme_bw() + Nice.Label
+
+## spiral normalized drawing using center rule
+ggplot(data = ms_data.Error_xscc, aes(x = MSE)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Mean Square Error", y = "Count") + 
+  theme_bw() + Nice.Label
+
+```
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+
+
+##### Plot density of the AUC Error
+## raw drawing
+ggplot(data = ms_data.Error_xy, aes(x = ErrAUC)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Drawing Error Using AUC", y = "Count") + 
+  theme_bw() + Nice.Label
+
+## Normalized by first point rule
+ggplot(data = ms_data.Error_xscf, aes(x = ErrAUC)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Drawing Error Using AUC", y = "Count") + 
+  theme_bw() + Nice.Label
+
+## spiral normalized drawing using center rule
+ggplot(data = ms_data.Error_xscc, aes(x = ErrAUC)) +
+  geom_histogram(bins = 35, fill="darkgray", color="black") +
+  facet_wrap(~difficulty_level, scales = "free", nrow = 3) +
+  labs(x = "Drawing Error Using AUC", y = "Count") + 
+  theme_bw() + Nice.Label
+
+```
 
 
 ## Approximate Entropy (ApEn)

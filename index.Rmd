@@ -24,9 +24,9 @@ output:
 ```
 
 
-<!-- ```{r child = 'chapter4.Rmd'} -->
+```{r child = 'chapter4.Rmd'}
 
-<!-- ``` -->
+```
 
 
 

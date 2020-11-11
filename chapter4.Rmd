@@ -1,0 +1,94 @@
+# Aggregation of all features
+
+## Patient derived features
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+##Extract feateares from Hausdorff distance datataframe
+ms_data.hausD <- ms_data.hausD_xy %>% 
+  dplyr::select(patient_id, ntest_date, difficulty_level, trial_id,
+                hausD, hausDError, hausDt, hausDIqr, hausD25, hausD75, hausDmiddle, hausDmiddlet)
+ms_data.hausD$difficulty_level <- factor(ms_data.hausD$difficulty_level, labels = c("1","2","3"))
+
+##Extract feateares from Error datataframe
+ms_data.Error <- ms_data.Error_xy %>% 
+  dplyr::select(patient_id, ntest_date, difficulty_level, trial_id,
+                ErrAUC, MSE, RMSE, Center_Sh, t_final, total_asym, true_asym, Corr)
+ms_data.Error$difficulty_level <- factor(ms_data.Error$difficulty_level, labels = c("1","2","3"))
+
+##Extract age, diagnosis_group, and gender from Error datataframe
+ms_data.stat <- ms_data.Error_xy %>% 
+  dplyr::select(patient_id, ntest_date, difficulty_level, trial_id, gender, diagnosis_group, age)
+ms_data.stat$difficulty_level <- factor(ms_data.stat$difficulty_level, labels = c("1","2","3"))
+
+
+## Merge all features
+merge_cols <- c("patient_id", "ntest_date","difficulty_level","trial_id")
+
+pat_feature <- merge(ms_data.stat, ms_data.sum, by = merge_cols, all = TRUE)
+pat_feature <- merge(pat_feature, ms_data.psd, by = merge_cols, all = TRUE)
+pat_feature <- merge(pat_feature, ms_data.psd, by = merge_cols, all = TRUE)
+pat_feature <- merge(pat_feature, ms_data.hausD, by = merge_cols, all = TRUE)
+pat_feature <- merge(pat_feature, ms_data.Error, by = merge_cols, all = TRUE)
+
+```
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Change the feature name with F1 to Fn
+pat_feat <- pat_feature 
+feature.name <- colnames(pat_feat)[8:47]
+new_feature.name <- paste(rep("F",length(feature.name)),1:length(feature.name),sep = "")
+
+## To recognize which label is what column name
+pat_label_table <- data.frame(Label = new_feature.name, Name = feature.name)
+
+## Change the patient feature label in dataframe
+colnames(pat_feature)[8:47] <- new_feature.name
+
+## Extract HV, MS, and Other cohorts
+pat_feat.HV <- subset(pat_feature, diagnosis_group == "HV")
+pat_feat.MS <- subset(pat_feature, diagnosis_group == "MS")
+pat_feat.Others <- subset(pat_feature, diagnosis_group == "Others")
+
+## Remove irrelevent columns
+pat_feat.HV2 <- pat_feat.HV[,8:47]
+pat_feat.MS2 <- pat_feat.MS[,8:47]
+pat_feat.Others2 <- pat_feat.Others[,8:47]
+
+```
+
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+
+
+#### Calculate the correlation matrix with pvalue
+cor_type <- "spearman"
+res.HV <- rcorr(as.matrix(pat_feat.HV2), type = cor_type)
+res.MS <- rcorr(as.matrix(pat_feat.MS2), type = cor_type)
+res.Others <- rcorr(as.matrix(pat_feat.Others2), type = cor_type)
+
+### Plot correlation plot of the features
+col_cor<- colorRampPalette(c("red", "white", "blue"))(20)
+
+corrplot(res.HV$r, type="upper", order="original", col = col,
+         p.mat = res.HV$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.0, font.lab=2, cl.cex = 1.2)
+
+corrplot(res.MS$r, type="upper", order="original", col = col,
+         p.mat = res.MS$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.0, font.lab=2, cl.cex = 1.2)
+
+corrplot(res.Others$r, type="upper", order="original", col = col,
+         p.mat = res.Others$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.0, font.lab=2, cl.cex = 1.2)
+
+```
+
+
+
+
+
