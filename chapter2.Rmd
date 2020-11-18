@@ -230,13 +230,14 @@ cv = function(vector){
 }
 
 ms_data.sum <- ms_data4 %>% 
-  group_by(patient_id,ntest_date,difficulty_level, trial_id) %>% 
-  summarise(v_sum = sum(v_i, na.rm = TRUE), v_cv = cv(v_i), 
+  dplyr::group_by(patient_id,ntest_date,difficulty_level, trial_id) %>% 
+  dplyr::summarise(v_sum = sum(v_i, na.rm = TRUE), v_cv = cv(v_i), 
             v_sk = skewness(v_i, na.rm = TRUE), v_kt = kurtosis(v_i, na.rm = TRUE), 
             rv_sum = sum(rv_i, na.rm = TRUE), rv_cv = cv(rv_i), 
             rv_sk = skewness(rv_i, na.rm = TRUE), rv_kt = kurtosis(rv_i, na.rm = TRUE),
             av_sum = sum(av_i,na.rm = TRUE), av_cv = cv(av_i), 
-            av_sk = skewness(av_i, na.rm = TRUE), av_kt = kurtosis(av_i, na.rm = TRUE))
+            av_sk = skewness(av_i, na.rm = TRUE), av_kt = kurtosis(av_i, na.rm = TRUE),
+            pressure_sum = sum(p, na.rm = TRUE))
 
 
 #### Power Spectral Density using Welsh periodogram with a Hamming window
@@ -252,8 +253,8 @@ pwelch_func <- function(vector){
   
   
 ms_data.psd <- ms_data4 %>% 
-   group_by(patient_id, ntest_date, difficulty_level, trial_id) %>%
-  summarise(v_psd.max = max(pwelch_func(filter_func(v_i,time,7))$spec), 
+   dplyr::group_by(patient_id, ntest_date, difficulty_level, trial_id) %>%
+  dplyr::summarise(v_psd.max = max(pwelch_func(filter_func(v_i,time,7))$spec), 
             v_df = pwelch_func(filter_func(v_i,time,7))$freq[which.max(pwelch_func(filter_func(v_i,time,7))$spec)],
             rv_psd.max = max(pwelch_func(filter_func(rv_i,time,7))$spec),
             rv_df = pwelch_func(filter_func(rv_i,time,7))$freq[which.max(pwelch_func(filter_func(rv_i,time,7))$spec)],
@@ -288,157 +289,57 @@ ms_data.psd <- ms_data4 %>%
 
 
 
-```{r  message=FALSE, warning=FALSE, include=FALSE}
-
-### "NIB657"    "NIB659"    "NIB661"    "NIB662"    "NIB663"    "NIB664"    "PATIENT10" 
-##"NDS688"    "NDS689"    "NDS690"    "NDS691"    "NDS692"    "NDS693"    "NDS694"    "NDS696"
-p1 <- subset(ms_data4, patient_id=="NDS667") ## select single patient ## NIB112 ##NDS668
-p11 <- subset(p1, ntest_date=="1") ## select one test date (1)
-p111 <- subset(p11, difficulty_level=="1") ## select single difficulty level (1)
-p1111 <- subset(p111, trial_id == "1A04mNtHZL8byD7ESgy6") #p111$trial_id[1]) ## "JSpymPxwdnXwvLzXpjym"
-##
-
-x<- p1111$x - p1111$x[25]
-y<- p1111$y - p1111$y[25]
-
-t <- p1111$time
-x <- p1111$av_i
-z <- filter_func(x, t, 8) # apply filter
-## fs (sampling frequency)= no of samples/ sampling time (max time)
-## The highest frequency  is assumed to be fs/2
-
-pz <- pwelch_func(z) 
-
-plot(pz$freq,pz$spec, 'o')
-
-plot(t,x,'o')
-lines(t,z,col="orange")
-
-```
-
-
-
-
 ```{r  echo=FALSE, warning=FALSE, message=FALSE, fig.height=6, fig.width= 10}
 
-library(VennDiagram)
+## Select a single healthy cohorts
+hv_1 <- subset(ms_data4, patient_id=="NDS675") ## select single patient ## NIB112 ##NDS668
+hv_11 <- subset(hv_1, ntest_date=="1") ## select one test date (1)
+hv_111 <- subset(hv_11, difficulty_level=="2") ## select single difficulty level (1)
+hv_1111 <- subset(hv_111, trial_id == hv_111$trial_id[1]) 
+## Select a single MS cohorts
+ms_1 <- subset(ms_data4, patient_id=="NDS674") ## select single patient ## NIB112 ##NDS668
+ms_11 <- subset(ms_1, ntest_date=="1") ## select one test date (1)
+ms_111 <- subset(ms_11, difficulty_level=="2") ## select single difficulty level (1)
+ms_1111 <- subset(ms_111, trial_id == ms_111$trial_id[1]) 
+## Select a single other cohorts
+other_1 <- subset(ms_data4, patient_id=="NDS676") ## select single patient ## NIB112 ##NDS668
+other_11 <- subset(other_1, ntest_date=="1") ## select one test date (1)
+other_111 <- subset(other_11, difficulty_level=="2") ## select single difficulty level (1)
+other_1111 <- subset(other_111, trial_id == other_111$trial_id[1]) 
 
-spiraldata1 <- read.csv("spiralDS1.csv", header = TRUE)
+col_imag <- colorRampPalette(c("blue","yellow","red"))(100)
 
-Spiral_Vanessa <- ms_data$patientID
-Spiral_Peter <- spiraldata1$metaData.ID
+## plot healthy cohorts
+data_hv <- as.matrix(data.frame(x=hv_1111$x,y=hv_1111$y))
+h2d_hv <- gplots::hist2d(data_hv, nbins = 25, 
+                      col = c("blue", col_imag), 
+                      same.scale = FALSE,
+                      show = FALSE)
+levelplot(h2d_hv$counts, col.regions = col_imag, scales=list(draw=FALSE), 
+          xlab = "", ylab= "", panel = panel.levelplot.raster, interpolate = FALSE, 
+          colorkey = list(title = "Time [s]"), cuts = 50)
+ 
+## plot MS cohorts
+data_ms <- as.matrix(data.frame(x=ms_1111$x,y=ms_1111$y))
+h2d_ms <- gplots::hist2d(data_ms, nbins = 25, 
+                      col = c("blue", col_imag), 
+                      same.scale = FALSE,
+                      show = FALSE)
+levelplot(h2d_ms$counts, col.regions = col_imag, scales=list(draw=FALSE), 
+          xlab = "", ylab= "", panel = panel.levelplot.raster, interpolate = FALSE, 
+          colorkey = list(title = "Time [s]"), cuts = 50)
 
-S_vanessa.l <- length(levels(factor(Spiral_Vanessa)))
-S_Peter.l <- length(levels(factor(Spiral_Peter)))
-cross.area <- length(intersect(Spiral_Vanessa,Spiral_Peter))
-diff_Van.Pet <- setdiff(Spiral_Vanessa,Spiral_Peter)
-diff_Pet.Van <- setdiff(Spiral_Peter,Spiral_Vanessa)
-
-grid.newpage();
-venn.plot <- draw.pairwise.venn(area1 = S_vanessa.l, 
-                                area2 = S_Peter.l, 
-                                cross.area = cross.area,
-                                #col = "red",
-                                lty = "blank",
-                                cat.cex = c(1.5,1.5), cex = c(2.5,2.5,2.5),
-                 fill = c("green", "blue"),
-                 category = c("Vanessa Data", "Peter Data"));
-grid.draw(venn.plot)
-
-
-### Splitting the dataset
-#a # original data frame
-
-#train<-sample_frac(a, 0.7)
-#sid<-as.numeric(rownames(train)) # because rownames() returns character
-#test<-a[-sid,]
-
-## euclidean distance
-euc.dist <- function(x2,y2){
-  x1 <- 0
-  y1 <- 0
-  return(sqrt((x1 - x2) ^ 2 + (y1-y2)^2))
-}
-
-ms_dist <- tibble::as_tibble(ms_data4) %>% 
-  group_by(patient_id, ntest_date, difficulty_level, trial_id) %>% 
-  summarise(dist = euc.dist(x,y)) %>% 
-  slice(1)
-
-ms_dist$difficulty_level <- factor(ms_dist$difficulty_level, 
-                                   labels = c("Difficulty Level 1",
-                                              "Difficulty Level 2",
-                                              "Difficulty Level 3") )
-
-
-ggplot(ms_dist, aes(x=dist)) +
-  geom_histogram(color="darkblue", fill="lightblue", bins = 50) +
-  facet_wrap(~difficulty_level, nrow = 1, scales = "free") +
-  labs(x = "Euclidean Distance between (0,0) and First Spiral Point", y = "Count") +
-  theme_bw() + Nice.Label
-
-ms_dist.var <- tibble::as_tibble(ms_dist)  %>% 
-  group_by(patient_id, difficulty_level) %>% 
-  summarise(dist_var = var(dist))
-
-ggplot(ms_dist.var, aes(x=dist_var)) +
-  geom_histogram(color="darkblue", fill="lightblue", bins = 10) +
-  facet_wrap(~difficulty_level, nrow = 1, scales = "free") +
-  labs(x = "Variance of Euclidean Distance by Patient", y = "Count") +
-  theme_bw() + Nice.Label
-####
-
-## https://slowkow.com/notes/ggplot2-color-by-density/
-get_density <- function(x, y, ...) {
-  dens <- MASS::kde2d(x, y, ...)
-  ix <- findInterval(x, dens$x)
-  iy <- findInterval(y, dens$y)
-  ii <- cbind(ix, iy)
-  return(dens$z[ii])
-}
-
-
-x_dat <- cut(p1111$x,50)
-y_dat <- cut(p1111$y,50)
-time <- p1111$time
-dat <- data.frame(x=x_dat,y=y_dat,time=time)
-
-dat <- expand.grid(x = x_dat, y= y_dat)
-dat <- matrix(dat, ncol = 50)
-
-dat <- data.frame(x = p1111$x, y = p1111$y, time)
-
-
-
-
-ggplot(dat, aes(x,y)) +
-  geom_raster(aes(fill = after_stat(time)),interpolate = TRUE, hjust = 0, vjust = 0) +
-  scale_fill_distiller("Time [s]", palette = "RdYlBu", direction = -1) +
-  #viridis::scale_fill_viridis("Time [s]", discrete = FALSE) +
-  theme_bw(base_size = 18) +
-   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), 
-         axis.ticks.x=element_blank(),axis.title.y=element_blank(), 
-         axis.text.y=element_blank(), axis.ticks.y=element_blank(), 
-         panel.background = element_rect(fill = "blue",
-                                colour = "blue", 
-                                size = 0.5, linetype = "solid"),
-         panel.grid.major = element_line(size = 0.5, linetype = 'solid',
-                                colour = "black"),
-         legend.key.height = unit(2.1, "cm")) 
-  
-
-p <- ggplot(dat, aes(x, y, fill = time)) +
-  stat_bin_2d(bins = 50, drop = FALSE) +
-  scale_fill_distiller("Time [s]", palette = "RdYlBu", direction = -1) +
-  theme_bw(base_size = 18) +
-   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), 
-         axis.ticks.x=element_blank(),axis.title.y=element_blank(), 
-         axis.text.y=element_blank(), axis.ticks.y=element_blank(), 
-         panel.grid.major = element_line(size = 0.5, linetype = 'solid',
-                                colour = "black"),
-         legend.key.height = unit(2.1, "cm")) 
-
-ggplot_build(p)$data[[1]]$count
-
+## plot Other cohorts
+data_others <- as.matrix(data.frame(x=other_1111$x,y=other_1111$y))
+h2d_others <- gplots::hist2d(data_others, nbins = 25, 
+                      col = c("blue", col_imag), 
+                      same.scale = FALSE,
+                      show = FALSE)
+levelplot(h2d_others$counts, col.regions = col_imag, scales=list(draw=FALSE), 
+          xlab = "", ylab= "", panel = panel.levelplot.raster, interpolate = FALSE, 
+          colorkey = list(title = "Time [s]"), cuts = 50)
+##
 ```
+
+
 

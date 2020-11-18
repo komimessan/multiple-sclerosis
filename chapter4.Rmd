@@ -1,9 +1,10 @@
 # Aggregation of all features
 
-## Patient derived features
-
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+##### Patient derived features
+
 ##Extract feateares from Hausdorff distance datataframe
 ms_data.hausD <- ms_data.hausD_xy %>% 
   dplyr::select(patient_id, ntest_date, difficulty_level, trial_id,
@@ -13,13 +14,20 @@ ms_data.hausD$difficulty_level <- factor(ms_data.hausD$difficulty_level, labels 
 ##Extract feateares from Error datataframe
 ms_data.Error <- ms_data.Error_xy %>% 
   dplyr::select(patient_id, ntest_date, difficulty_level, trial_id,
-                ErrAUC, MSE, RMSE, Center_Sh, t_final, total_asym, true_asym, Corr)
+                ErrAUC, MSE, RMSE, Center_Sh, t_final, total_asym, true_asym, Corr, 
+                ImEntropy_pat, ImEntropy_ratio)
 ms_data.Error$difficulty_level <- factor(ms_data.Error$difficulty_level, labels = c("1","2","3"))
 
 ##Extract age, diagnosis_group, and gender from Error datataframe
 ms_data.stat <- ms_data.Error_xy %>% 
-  dplyr::select(patient_id, ntest_date, difficulty_level, trial_id, gender, diagnosis_group, age)
+  dplyr::select(patient_id, ntest_date, difficulty_level, trial_id, gender, diagnosis_group, age,
+                appendage, dominant_hand)
 ms_data.stat$difficulty_level <- factor(ms_data.stat$difficulty_level, labels = c("1","2","3"))
+ms_data.stat$dominant_hand <- ifelse(ms_data.stat$dominant_hand=="Right","RH","LH")
+
+## Determine if patient use dominant hand or not
+ms_data.stat$dominant_hand_use <- ifelse(ms_data.stat$appendage==ms_data.stat$dominant_hand,
+                                         "YES","NO")
 
 
 ## Merge all features
@@ -27,25 +35,79 @@ merge_cols <- c("patient_id", "ntest_date","difficulty_level","trial_id")
 
 pat_feature <- merge(ms_data.stat, ms_data.sum, by = merge_cols, all = TRUE)
 pat_feature <- merge(pat_feature, ms_data.psd, by = merge_cols, all = TRUE)
-pat_feature <- merge(pat_feature, ms_data.psd, by = merge_cols, all = TRUE)
+pat_feature <- merge(pat_feature, ms_data.apen, by = merge_cols, all = TRUE)
 pat_feature <- merge(pat_feature, ms_data.hausD, by = merge_cols, all = TRUE)
 pat_feature <- merge(pat_feature, ms_data.Error, by = merge_cols, all = TRUE)
 
-```
 
-
-
-```{r  message=FALSE, warning=FALSE, include=FALSE}
 ## Change the feature name with F1 to Fn
 pat_feat <- pat_feature 
-feature.name <- colnames(pat_feat)[8:47]
+feature.name <- colnames(pat_feat)[11:50]
 new_feature.name <- paste(rep("F",length(feature.name)),1:length(feature.name),sep = "")
 
 ## To recognize which label is what column name
 pat_label_table <- data.frame(Label = new_feature.name, Name = feature.name)
 
 ## Change the patient feature label in dataframe
-colnames(pat_feature)[8:47] <- new_feature.name
+colnames(pat_feature)[11:50] <- new_feature.name
+
+```
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+##### Clinical derived features
+
+cl_feature <- ms_data.Error_xy %>% 
+  dplyr::select(patient_id, ntest_date, difficulty_level, trial_id, 
+                X9HPT.Avg, BMI, grep("CL",names(ms_data.Error_xy), value = TRUE)) 
+
+## dominant_hand_use to cl_feature
+cl_feature <- merge(ms_data.stat, cl_feature, 
+                    by = c("patient_id", "ntest_date","difficulty_level", "trial_id"))
+
+## Change the clinical feature name with C1 to Cn
+cl_feat <- cl_feature 
+cl.name <- colnames(cl_feat)[11:42]
+new_cl.name <- paste(rep("C",length(cl.name)),1:length(cl.name),sep = "")
+
+
+## To recognize which label is what column name (see chapter 1 for full name)
+cl_label_table2 <- data.frame(Label = new_cl.name, Name = cl.name)
+
+## Change the patient feature label in dataframe
+colnames(cl_feature)[11:42] <- new_cl.name
+
+```
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+#### Extract Right and Left dominant hand from both datasets
+pat_feat.RH <- subset(pat_feature, dominant_hand=="RH")
+pat_feat.LH <- subset(pat_feature, dominant_hand=="LH")
+
+cl_feat.RH <- subset(cl_feature, dominant_hand=="RH")
+cl_feat.LH <- subset(cl_feature, dominant_hand=="LH")
+
+#### Extract if patient use dominant hand or not
+pat_feat.RH.Yes <- subset(pat_feat.RH, dominant_hand_use=="YES")
+pat_feat.RH.No <- subset(pat_feat.RH, dominant_hand_use=="NO")
+pat_feat.LH.Yes <- subset(pat_feat.LH, dominant_hand_use=="YES")
+pat_feat.LH.No <- subset(pat_feat.LH, dominant_hand_use=="NO")
+
+cl_feat.RH.Yes <- subset(cl_feat.RH, dominant_hand_use=="YES")
+cl_feat.RH.No <- subset(cl_feat.RH, dominant_hand_use=="NO")
+cl_feat.LH.Yes <- subset(cl_feat.LH, dominant_hand_use=="YES")
+cl_feat.LH.No <- subset(cl_feat.LH, dominant_hand_use=="NO")
+
+```
+
+
+
+## Correlation of Patient derived features
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
 
 ## Extract HV, MS, and Other cohorts
 pat_feat.HV <- subset(pat_feature, diagnosis_group == "HV")
@@ -76,19 +138,219 @@ col_cor<- colorRampPalette(c("red", "white", "blue"))(20)
 
 corrplot(res.HV$r, type="upper", order="original", col = col,
          p.mat = res.HV$P, sig.level = 0.05, insig = "blank", diag = TRUE,
-         tl.col = "black", tl.cex = 1.0, font.lab=2, cl.cex = 1.2)
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2)
 
 corrplot(res.MS$r, type="upper", order="original", col = col,
          p.mat = res.MS$P, sig.level = 0.05, insig = "blank", diag = TRUE,
-         tl.col = "black", tl.cex = 1.0, font.lab=2, cl.cex = 1.2)
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2)
 
 corrplot(res.Others$r, type="upper", order="original", col = col,
          p.mat = res.Others$P, sig.level = 0.05, insig = "blank", diag = TRUE,
-         tl.col = "black", tl.cex = 1.0, font.lab=2, cl.cex = 1.2)
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2)
+
+```
+
+
+## Statistical differences betweeen patient features at different difficulty levels
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Construct a function to calculate statistical significant differences between 
+## features at different levels given a dataframe
+
+#### Create a function to plot a and b on top of the boxplot
+
+## Function to generate letters based onm Tukey comparison test
+tukey_label.func <- function(data ,TUKEY, group_var){
+  ## Data is dataframe containing features and the first column being the categorical variables
+  ## TUKEY is the Tukey test result
+  ##group_var is the grouping variable in quotation mark
+  
+  # Extract labels and factor levels from Tukey post-hoc 
+  Tukey.levels <- TUKEY[["Group"]][,4]
+  Tukey.labels <- data.frame(multcompLetters(Tukey.levels)['Letters'])
+  
+  # Put the labels in the same order as in the data:
+  Tukey.labels$treatment=rownames(Tukey.labels)
+  Matching_Label<-data.frame(treatment=levels(data[,group_var]))
+  Tukey.labels=Tukey.labels[match(Matching_Label$treatment,Tukey.labels$treatment),]
+  #Tukey.labels=Tukey.labels[order(Tukey.labels$treatment), ]
+  return(Tukey.labels)
+}
+
+
+## ANOVA test combined with Tuley comparison test
+stat_diff.func <- function(data, alpha, group_var){
+  ## Data is dataframe containing features and the first column being the categorical variables
+  ## alpha is the alpha level (e.g 0.05)
+  ## group_var is the grouping variable
+  
+  ## Extract the group variable
+  Group <- data[,group_var]
+  ## number of feature + grouping variable
+  f_numb <- dim(data)[2] 
+  
+  ## Create an empty significance dataframe
+  sign_df <- data[0,]
+  sign_df[,group_var] <- as.character(sign_df[,group_var]) ## Convert group variable to character
+  colnames(sign_df)[1] <- "" ## Remove first grouping variable name
+  sign_df[1,1] <- "Significant"
+  sign_df[2,1] <- "Level 1"
+  sign_df[3,1] <- "Level 2"
+  sign_df[4,1] <- "Level 3"
+  
+  
+  for (j in 2:(f_numb-0)){
+    ## Data frame of feature i and group
+    fi_data <- data.frame(Group = Group, Feature = data[,j])
+    
+    ## Anova and kruskal wallis non-parametric test 
+    anova_test <-aov(Feature~Group, data = fi_data)
+    kw_test <- kruskal.test(Feature~Group, data = fi_data)
+    
+    ## Homogeneity of variance and normality of residual test from ANOVA
+    levene_test <- LeveneTest(Feature~Group, data = fi_data) 
+    shapiro_test <- shapiro.test(residuals(object = anova_test)) 
+    
+    ## Extract p-value from different tests
+    pval.anova <- summary(anova_test)[[1]][["Pr(>F)"]][1]
+    pval.kw <- kw_test$p.value
+    pval.levene <- levene_test$`Pr(>F)`[1]
+    pval.shapiro <- shapiro_test$p.value
+    
+    # is anova significant and assumptions satisfied
+    if(pval.anova < alpha & pval.levene > alpha & pval.shapiro > alpha){ 
+      ## Markm significant as yes
+      sign_df[1,j] <- "YES"
+      ## Tukey Multiple comparison test
+      tukey_res = TukeyHSD(x=anova_test, 'Group', conf.level=0.95)
+      ## Generate results from Tukey test
+      label <- tukey_label.func(data = data,TUKEY= tukey_res,group_var)
+      ## Add the letter crresponding to Tukey results
+      sign_df[2:4,j] <- as.character(label$Letters) 
+      # is anova non-significant and assumptions satisfied
+    } else if (pval.anova >= alpha & pval.levene > alpha & pval.shapiro > alpha) {
+      sign_df[1,j] <- "NO"
+      sign_df[2:4,j] <- "-"
+      # is one of the assumptions not satisfied but anova and kw significant
+    } else if (pval.anova < alpha & (pval.levene < alpha | pval.shapiro < alpha) & pval.kw < alpha){
+      sign_df[1,j] <- "YES"
+      sign_df[2:4,j] <- as.character(label$Letters)
+      # is one of the assumptions not satisfied and anova not sign. but kw significant
+    } else if (pval.anova > alpha & (pval.levene < alpha | pval.shapiro < alpha) & pval.kw < alpha){
+      sign_df[1,j] <- "YES (KW)"
+       sign_df[2:4,j] <- "-"
+      #anything else
+    } else {
+      sign_df[1,j] <- "NO"
+      sign_df[2:4,j] <- "-"
+    }
+  }
+  return(sign_df)
+}
 
 ```
 
 
 
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+## Cohort data with difficulty level
+pat_feat.HV_dl <- pat_feat.HV %>% 
+  dplyr::select(-c(patient_id,ntest_date,trial_id,gender,diagnosis_group,age))
+pat_feat.MS_dl <- pat_feat.MS %>% 
+  dplyr::select(-c(patient_id,ntest_date,trial_id,gender,diagnosis_group,age))
+pat_feat.Others_dl <- pat_feat.Others %>% 
+  dplyr::select(-c(patient_id,ntest_date,trial_id,gender,diagnosis_group,age))
+
+## Generate the dataframe of significance level based on difficulty level
+sign.df_HV <- stat_diff.func(pat_feat.HV_dl,0.05,"difficulty_level")
+
+sign.df_MS <- stat_diff.func(pat_feat.MS_dl,0.05,"difficulty_level")
+
+sign.df_Others <- stat_diff.func(pat_feat.Others_dl,0.05,"difficulty_level")
+
+#### Significance based on diagnosis 
+pat_feat.diagnosis <- pat_feature %>% 
+  dplyr::select(-c(patient_id,ntest_date,difficulty_level,trial_id,gender,age))
+
+## significance at 0.05
+sign.df_diagnosis <- stat_diff.func(pat_feat.diagnosis,0.05,"diagnosis_group")
+
+```
+
+
+
+## Correlation of clinical derived features
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Extract all clinical features
+
+
+
+## Extract HV, MS, and Other cohorts
+cl_feat.HV <- subset(cl_feature, diagnosis_group == "HV")
+cl_feat.MS <- subset(cl_feature, diagnosis_group == "MS")
+cl_feat.Others <- subset(cl_feature, diagnosis_group == "Others")
+
+## Remove irrelevent columns
+cl_feat.HV2 <- cl_feat.HV[,2:33]
+cl_feat.MS2 <- cl_feat.MS[,2:33]
+cl_feat.Others2 <- cl_feat.Others[,2:33]
+
+## significance at 0.05
+sign.df_diagnosis_cl <- stat_diff.func(cl_feature, 0.05, "diagnosis_group")
+
+```
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+
+
+#### Calculate the correlation matrix with pvalue
+res_cl.HV <- rcorr(as.matrix(cl_feat.HV2), type = cor_type)
+res_cl.MS <- rcorr(as.matrix(cl_feat.MS2), type = cor_type)
+res_cl.Others <- rcorr(as.matrix(cl_feat.Others2), type = cor_type)
+
+
+corrplot(res_cl.HV$r, type="upper", order="original", col = col,
+         p.mat = res_cl.HV$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
+
+corrplot(res_cl.MS$r, type="upper", order="original", col = col,
+         p.mat = res_cl.MS$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
+
+corrplot(res_cl.Others$r, type="upper", order="original", col = col,
+         p.mat = res_cl.Others$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
+
+```
+
+
+## Correlation between Patient derived features and clinical features
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+
+
+#### Calculate the correlation matrix with pvalue
+
+res.pat_cl <- rcorr(as.matrix(cl_feature[,2:33]),
+                    as.matrix(pat_feat.diagnosis[,2:41]), type = "pearson", #cor_type,
+                    use = "pairwise.complete.obs")
+
+## Extract the correlation and pvalue for patient features and clinical features
+r_pat_cl <- res.pat_cl$r[1:32,33:72]
+p_pat_cl <- res.pat_cl$P[1:32,33:72]
+
+## Plot
+corrplot(r_pat_cl, type="full", order="original", col = col,
+         p.mat = p_pat_cl, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2)
+
+```
 
 

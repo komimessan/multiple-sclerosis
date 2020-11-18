@@ -87,6 +87,9 @@ HausData_func <- function(data, xs, ys){
             dat75 <- fdata(dat[round(dim_tr*0.75):dim_tr,])
             dat15_85 <- fdata(dat[round(dim_tr*0.15):round(dim_tr*0.85),])
             
+            dim25 <- dim(dat[1:round(dim_tr*0.25),])[1] ## Number of touchpoints at the beginning
+            dim75 <- dim(dat[round(dim_tr*0.75):dim_tr,])[1] ## Number of touchpoints at the end
+              
             ref_dat25 <- fdata(ref_dat[1:round(dim_tr*0.25),])
             ref_dat75 <- fdata(ref_dat[round(dim_tr*0.75):dim_tr,])
             ref_dat15_85 <- fdata(ref_dat[round(dim_tr*0.15):round(dim_tr*0.85),])
@@ -102,9 +105,9 @@ HausData_func <- function(data, xs, ys){
             tr.level[tr.level$trial_id==tr,"hausDIqr"] <-
               IQR(metric.hausdorff(fdata(dat),fdata(ref_dat)),na.rm = TRUE)
             tr.level[tr.level$trial_id==tr,"hausD25"] <- 
-              max(metric.hausdorff(dat25,ref_dat25), na.rm = TRUE)
+              max(metric.hausdorff(dat25,ref_dat25), na.rm = TRUE)/dim25
             tr.level[tr.level$trial_id==tr,"hausD75"] <- 
-              max(metric.hausdorff(dat75,ref_dat75), na.rm = TRUE)
+              max(metric.hausdorff(dat75,ref_dat75), na.rm = TRUE)/dim75
             tr.level[tr.level$trial_id==tr,"hausDmiddle"] <-
               max(metric.hausdorff(dat15_85,ref_dat15_85), na.rm = TRUE)
             tr.level[tr.level$trial_id==tr,"hausDmiddlet"] <-
@@ -162,8 +165,8 @@ HausData_func <- function(data, xs, ys){
 # ptm <- proc.time() ## Take 59 min
 # ms_data.hausD_xscc <- HausData_func(ms_data4, "x_scc", "y_scc")
 # proc.time() - ptm
-# # 
-# # 
+# #
+# #
 # write.csv(ms_data.hausD_xscc, file = "ms_data.hausD_xscc.csv")
 
 ms_data.hausD_xy <- read.csv("ms_data.hausD_xy.csv", header = TRUE)
@@ -262,6 +265,9 @@ Error_func <- function(data, xs, ys){
   data[,"total_asym"] <- 0 ## total asymmetry
   data[,"true_asym"] <- 0 #3 difference between patient and reference asymmetry
   data[,"Corr"] <- 0 ## 2D cross-correlation between the two images
+  data[,"ImEntropy_pat"] <- 0 ## image entropy of shape drawn
+  data[,"ImEntropy_ratio"] <- 0 ## image entropy of reference shape divide by reference 
+  
   
 
   
@@ -348,6 +354,11 @@ Error_func <- function(data, xs, ys){
             r_denom <- sum((mat_ref - m_ref_mean)^2, na.rm = TRUE)*sum(
               (mat_pat - m_pat_mean)^2, na.rm = TRUE) 
             
+            #### Image entropy
+            ## 2D dsicretization 
+            bin_ref <- discretize2d(x_ref,y_ref,numBins1 = 50,numBins2 = 50)
+            bin_pat <- discretize2d(x_pat,y_pat,numBins1 = 50,numBins2 = 50)
+            
             
             
               
@@ -365,6 +376,9 @@ Error_func <- function(data, xs, ys){
             tr.level[tr.level$trial_id==tr,"total_asym"] <- pat_asym
             tr.level[tr.level$trial_id==tr,"true_asym"] <- abs(pat_asym - ref_asym)
             tr.level[tr.level$trial_id==tr, "Corr"] <- r_num/sqrt(r_denom)
+            tr.level[tr.level$trial_id==tr, "ImEntropy_pat"] <- shannonX(bin_pat)$shannon
+            tr.level[tr.level$trial_id==tr, "ImEntropy_ratio"] <- 
+              (shannonX(bin_pat)$shannon)/(shannonX(bin_ref)$shannon)
 
             
             ## Remove some variables and take first row only
@@ -525,8 +539,8 @@ ggplot(data = ms_data.Error_xscc, aes(x = ErrAUC)) +
 ### Approximate Entropy (ApEn)
 ## Interpolate all v_i, r_vi, av_i over a fixed length L = 500 (see similar approach in Creagh et al., 2020) and calculate their entropy 
 ms_data.apen <- ms_data4 %>% 
-   group_by(patient_id,ntest_date,difficulty_level, trial_id) %>%
-  summarise(v_apen = ApEn(spline(v_i, n = 500)$y), 
+   dplyr::group_by(patient_id,ntest_date,difficulty_level, trial_id) %>%
+  dplyr::summarise(v_apen = ApEn(spline(v_i, n = 500)$y), 
             rv_apen = ApEn(spline(rv_i, n = 500)$y), 
             av_apen = ApEn(spline(av_i, n = 500)$y))
 

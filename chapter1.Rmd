@@ -19,10 +19,14 @@ library(forecast) ## v. 8.13 ## for outlier detection https://cran.r-project.org
 library(fda.usc) ## v. 2.0.2
 library(pathmapping) ## v. 1.0.2 ## For Area Under two curves ##https://cran.r-project.org/web/packages/pathmapping/pathmapping.pdf
 library(DescTools) ## v. 0.99.38 ## ## For trapezoid rule https://www.rdocumentation.org/packages/DescTools/versions/0.99.37
-library(SpatEntropy) ##v.0.1.0 ## For Image Entropy ## https://cran.r-project.org/web/packages/SpatEntropy/SpatEntropy.pdf
-library(raster) ## v. 3.3.13 ## to create a grid of x y, coordinates of z values
+#library(SpatEntropy) ##v.0.1.0 ## For Image Entropy ## https://cran.r-project.org/web/packages/SpatEntropy/SpatEntropy.pdf
+#library(raster) ## v. 3.3.13 ## to create a grid of x y, coordinates of z values
 library(corrplot) ##v.0.84 ## for correlation matrix plot
 library(Hmisc) ## v.4.4.0 ## to calculate matrix of correlation and pvalue
+library(multcompView) ## v. 0.1.8 ## to generate letters from Tukey test
+library(CulturalAnalytics) ## v. 1.0.7 ## for image entropy
+library(entropy) ## v. 1.2.1 ## To use discretize2d for 2D binning 
+library(SpatEntropy) ##v. 0.1.0 ## For Image entropy using shannon
 ```
 
 
