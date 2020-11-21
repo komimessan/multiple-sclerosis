@@ -84,40 +84,209 @@ colnames(cl_feature)[11:42] <- new_cl.name
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 #### Extract Right and Left dominant hand from both datasets
-pat_feat.RH <- subset(pat_feature, dominant_hand=="RH")
-pat_feat.LH <- subset(pat_feature, dominant_hand=="LH")
+# pat_feat.RH <- subset(pat_feature, dominant_hand=="RH")
+# pat_feat.LH <- subset(pat_feature, dominant_hand=="LH")
+# 
+# cl_feat.RH <- subset(cl_feature, dominant_hand=="RH")
+# cl_feat.LH <- subset(cl_feature, dominant_hand=="LH")
+# 
+# #### Extract if patient use dominant hand or not
+# pat_feat.RH.Yes <- subset(pat_feat.RH, dominant_hand_use=="YES")
+# pat_feat.RH.No <- subset(pat_feat.RH, dominant_hand_use=="NO")
+# pat_feat.LH.Yes <- subset(pat_feat.LH, dominant_hand_use=="YES")
+# pat_feat.LH.No <- subset(pat_feat.LH, dominant_hand_use=="NO")
+# 
+# cl_feat.RH.Yes <- subset(cl_feat.RH, dominant_hand_use=="YES")
+# cl_feat.RH.No <- subset(cl_feat.RH, dominant_hand_use=="NO")
+# cl_feat.LH.Yes <- subset(cl_feat.LH, dominant_hand_use=="YES")
+# cl_feat.LH.No <- subset(cl_feat.LH, dominant_hand_use=="NO")
 
-cl_feat.RH <- subset(cl_feature, dominant_hand=="RH")
-cl_feat.LH <- subset(cl_feature, dominant_hand=="LH")
 
 #### Extract if patient use dominant hand or not
-pat_feat.RH.Yes <- subset(pat_feat.RH, dominant_hand_use=="YES")
-pat_feat.RH.No <- subset(pat_feat.RH, dominant_hand_use=="NO")
-pat_feat.LH.Yes <- subset(pat_feat.LH, dominant_hand_use=="YES")
-pat_feat.LH.No <- subset(pat_feat.LH, dominant_hand_use=="NO")
+pat_feat.dom <- subset(pat_feature, dominant_hand_use=="YES")
+pat_feat.nondom <- subset(pat_feature, dominant_hand_use=="NO")
 
-cl_feat.RH.Yes <- subset(cl_feat.RH, dominant_hand_use=="YES")
-cl_feat.RH.No <- subset(cl_feat.RH, dominant_hand_use=="NO")
-cl_feat.LH.Yes <- subset(cl_feat.LH, dominant_hand_use=="YES")
-cl_feat.LH.No <- subset(cl_feat.LH, dominant_hand_use=="NO")
+
+cl_feat.dom <- subset(cl_feature, dominant_hand_use=="YES")
+cl_feat.nondom <- subset(cl_feature, dominant_hand_use=="NO")
 
 ```
+
+## Identification of relevent difficulty level
+
+In what follow, we will identify which difficulty level is most relevent for our analysis. This will be done by computing the unpaired two samples Wilcoxon test between the Health Volunteers (HV) and the MS cohort for each feature and at each difficulty levels. We will check how many features are statistically significant at p=0.005 for each features at each difficulty level. We use unpaired wilcoxon test because the same test is be done between HV and MS cohorts and this non-parametric test is being used to relax the normality assumption.
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Construct a function to conduct the wilcoxon test between HV and MS cohorts
+## and return features that are significant at each difficulty level
+
+wtest_func <- function(data, alpha, group_var){
+  ## Data is dataframe containing features and the first column being the categorical variables
+  ## alpha is the alpha level (e.g 0.05)
+  ## group_var is the grouping variable
+  
+  ## Remove irrelevent columns and rows
+  sub_data <- data %>% 
+    dplyr::select(difficulty_level, diagnosis_group, 
+                  grep("F",names(data), value = TRUE)) %>% 
+    dplyr::filter(diagnosis_group %in% c("HV","MS"))
+  
+  ## difficulty levels
+  d_level <- c(1,2,3)
+  ## empty vector of non-significant features
+  DL1 <- c() 
+  DL2 <- c() 
+  DL3 <- c() 
+  
+  for (dl in d_level){
+    sub_data.level <- sub_data %>% 
+      dplyr::filter(difficulty_level==dl) %>% dplyr::select(-c(difficulty_level))
+    f_numb <- dim(sub_data.level)[2]
+    
+    Group <- sub_data.level[,group_var]
+    
+    for (j in 2:f_numb){
+      fi_data <- data.frame(Group = Group, Feature = sub_data.level[,j])
+      res <- wilcox.test(Feature ~ Group, data = fi_data, exact = FALSE)
+      pval <- res$p.value
+      
+      if (dl==1 & (pval < alpha)) {
+        DL1 <- c(DL1, paste0("F", j-1, collapse = ""))
+      }
+      if (dl==2 & (pval < alpha)) {
+        DL2 <- c(DL2, paste0("F", j-1, collapse = ""))
+      }
+      if (dl==3 & (pval < alpha)) {
+        DL3 <- c(DL3, paste0("F", j-1, collapse = ""))
+      }
+    }
+    
+  }
+  return(list(DL1 = DL1, DL2= DL2, DL3=DL3))
+  
+} 
+
+
+
+```
+
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+#### Wixcoxon test of difference between HV and MS
+## Patient who use their dominant hand
+sign.dom <- wtest_func(pat_feat.dom, 0.05, "diagnosis_group")
+## Patient who did not use their dominant hand
+sign.nondom <- wtest_func(pat_feat.nondom, 0.05, "diagnosis_group")
+
+
+
+p_dom <- ggVennDiagram(sign.dom, show.legend = FALSE)
+p_nondom <- ggVennDiagram(sign.nondom, show.legend = FALSE)
+
+ggpubr::ggarrange(p_dom, p_nondom, 
+          labels = c("Dominant", "Non-dominant"), ncol = 2, nrow = 1)
+
+### Create dataframe of some features
+pat_feat.dom.dl2 <- subset(pat_feat.dom, difficulty_level=="2" & diagnosis_group != "Others")
+pat_feat.nondom.dl2 <- subset(pat_feat.nondom, difficulty_level=="2" & diagnosis_group != "Others")
+dom_sub.ft <- data.frame(Category = rep("Dominant", dim(pat_feat.dom.dl2)[1]), 
+                         Diagnosis = pat_feat.dom.dl2$diagnosis_group, 
+                         Velocity = pat_feat.dom.dl2$F1, 
+                         HausDError = pat_feat.dom.dl2$F24,
+                         TTC = pat_feat.dom.dl2$F35)
+nondom_sub.ft <- data.frame(Category = rep("Non-dominant", dim(pat_feat.nondom.dl2)[1]), 
+                         Diagnosis = pat_feat.nondom.dl2$diagnosis_group, 
+                         Velocity = pat_feat.nondom.dl2$F1, 
+                         HausDError = pat_feat.nondom.dl2$F24,
+                         TTC = pat_feat.nondom.dl2$F35)
+sub.ft <- rbind(dom_sub.ft, nondom_sub.ft)
+
+sub.ft.v <- sub.ft %>% dplyr::select(-c(HausDError, TTC))
+sub.ft.h <- sub.ft %>% dplyr::select(-c(Velocity, TTC))
+sub.ft.t <- sub.ft %>% dplyr::select(-c(HausDError, Velocity))
+
+sub.ft.v2 <- data_summary(sub.ft.v, varname = "Velocity", groupnames = c("Category", "Diagnosis"))
+sub.ft.h2 <- data_summary(sub.ft.h, varname = "HausDError", groupnames = c("Category", "Diagnosis"))
+sub.ft.t2 <- data_summary(sub.ft.t, varname = "TTC", groupnames = c("Category", "Diagnosis"))
+
+
+ggplot(sub.ft.v2, aes(x=Category, y=Velocity, fill=Diagnosis)) + 
+  geom_bar(stat="identity", color="black", width = 0.5, position=position_dodge()) +
+  geom_errorbar(aes(ymin=Velocity-sd, ymax=Velocity+sd), width=.2, position=position_dodge(.5)) +
+  scale_fill_manual(values=c('blue','red')) +
+  theme_bw() + Nice.Label + theme(legend.position="bottom")
+
+
+ggplot(sub.ft.h2, aes(x=Category, y=HausDError, fill=Diagnosis)) + 
+  geom_bar(stat="identity", color="black", position=position_dodge(), width = 0.5) +
+  geom_errorbar(aes(ymin=HausDError-sd, ymax=HausDError+sd), width=.2, 
+                position=position_dodge(.5)) + theme_bw() + Nice.Label +
+  scale_fill_manual(values=c('blue','red')) +
+  theme(legend.position="bottom")
+
+ggplot(sub.ft.t2, aes(x=Category, y=TTC, fill=Diagnosis)) + 
+  geom_bar(stat="identity", color="black", position=position_dodge(), width = 0.5) +
+  geom_errorbar(aes(ymin=TTC-sd, ymax=TTC+sd), width=.2, position=position_dodge(.5)) +
+  ylab("Time to Completion (s)") + scale_fill_manual(values=c('blue','red')) +
+  theme_bw() + Nice.Label + theme(legend.position="bottom")
+```
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Obtain the list of all significant features
+sign_features <- unique(c(sign.dom$DL1,sign.dom$DL2,sign.dom$DL3,
+                          sign.nondom$DL1,sign.nondom$DL2,sign.nondom$DL3))
+sign_features <- sign_features[order(as.numeric(gsub("F","", sign_features)))]
+
+## Extract only significant features from patient and clinical features
+
+pat_feat.dom.s <- pat_feat.dom %>% 
+  dplyr::select(-setdiff(paste0("F",1:40,""), sign_features))
+pat_feat.nondom.s <- pat_feat.nondom %>% 
+  dplyr::select(-setdiff(paste0("F",1:40,""), sign_features))
+
+
+```
+
 
 
 
 ## Correlation of Patient derived features
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Function to extract matrix of features for correlation plot
+mat.feat_func <- function(data, difficulty, diagnosis){
+  ## dataframe containing features, and group category
+  ## difficulty is difficulty level
+  ## diagnosis is diagnosis group
+  sub_data <- data %>% subset(difficulty_level==difficulty) %>% 
+    dplyr::filter(diagnosis_group==diagnosis) %>% 
+    dplyr::select(-c(1:10))
+  return(as.matrix(sub_data))
+} 
 
-## Extract HV, MS, and Other cohorts
-pat_feat.HV <- subset(pat_feature, diagnosis_group == "HV")
-pat_feat.MS <- subset(pat_feature, diagnosis_group == "MS")
-pat_feat.Others <- subset(pat_feature, diagnosis_group == "Others")
+#### Extract HV and MS cohorts
+## dominant hand
+pat_feat.domHV_l1 <- mat.feat_func(pat_feat.dom.s,1,"HV")
+pat_feat.domHV_l2 <- mat.feat_func(pat_feat.dom.s,2,"HV")
+pat_feat.domHV_l3 <- mat.feat_func(pat_feat.dom.s,3,"HV")
+pat_feat.domMS_l1 <- mat.feat_func(pat_feat.dom.s,1,"MS")
+pat_feat.domMS_l2 <- mat.feat_func(pat_feat.dom.s,2,"MS")
+pat_feat.domMS_l3 <- mat.feat_func(pat_feat.dom.s,3,"MS")
+## non-dominant hand
+pat_feat.nondomHV_l1 <- mat.feat_func(pat_feat.nondom.s,1,"HV")
+pat_feat.nondomHV_l2 <- mat.feat_func(pat_feat.nondom.s,2,"HV")
+pat_feat.nondomHV_l3 <- mat.feat_func(pat_feat.nondom.s,3,"HV")
+pat_feat.nondomMS_l1 <- mat.feat_func(pat_feat.nondom.s,1,"MS")
+pat_feat.nondomMS_l2 <- mat.feat_func(pat_feat.nondom.s,2,"MS")
+pat_feat.nondomMS_l3 <- mat.feat_func(pat_feat.nondom.s,3,"MS")
 
-## Remove irrelevent columns
-pat_feat.HV2 <- pat_feat.HV[,8:47]
-pat_feat.MS2 <- pat_feat.MS[,8:47]
-pat_feat.Others2 <- pat_feat.Others[,8:47]
 
 ```
 
@@ -129,23 +298,30 @@ pat_feat.Others2 <- pat_feat.Others[,8:47]
 
 #### Calculate the correlation matrix with pvalue
 cor_type <- "spearman"
-res.HV <- rcorr(as.matrix(pat_feat.HV2), type = cor_type)
-res.MS <- rcorr(as.matrix(pat_feat.MS2), type = cor_type)
-res.Others <- rcorr(as.matrix(pat_feat.Others2), type = cor_type)
+res.domHV_l1 <- rcorr(pat_feat.domHV_l1, type = cor_type)
+res.domMS_l1 <- rcorr(pat_feat.domMS_l1, type = cor_type)
+
+res.nondomHV_l1 <- rcorr(pat_feat.nondomHV_l1, type = cor_type)
+res.nondomMS_l1 <- rcorr(pat_feat.nondomMS_l1, type = cor_type)
+
 
 ### Plot correlation plot of the features
 col_cor<- colorRampPalette(c("red", "white", "blue"))(20)
 
-corrplot(res.HV$r, type="upper", order="original", col = col,
-         p.mat = res.HV$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+corrplot(res.domHV_l1$r, type="upper", order="original", col = col,
+         p.mat = res.domHV_l1$P, sig.level = 0.05, insig = "blank", diag = TRUE,
          tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2)
 
-corrplot(res.MS$r, type="upper", order="original", col = col,
-         p.mat = res.MS$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+corrplot(res.domMS_l1$r, type="upper", order="original", col = col,
+         p.mat = res.domMS_l1$P, sig.level = 0.05, insig = "blank", diag = TRUE,
          tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2)
 
-corrplot(res.Others$r, type="upper", order="original", col = col,
-         p.mat = res.Others$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+corrplot(res.nondomHV_l1$r, type="upper", order="original", col = col,
+         p.mat = res.nondomHV_l1$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2)
+
+corrplot(res.domMS_l1$r, type="upper", order="original", col = col,
+         p.mat = res.nondomMS_l1$P, sig.level = 0.05, insig = "blank", diag = TRUE,
          tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2)
 
 ```
@@ -255,27 +431,27 @@ stat_diff.func <- function(data, alpha, group_var){
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
-## Cohort data with difficulty level
-pat_feat.HV_dl <- pat_feat.HV %>% 
-  dplyr::select(-c(patient_id,ntest_date,trial_id,gender,diagnosis_group,age))
-pat_feat.MS_dl <- pat_feat.MS %>% 
-  dplyr::select(-c(patient_id,ntest_date,trial_id,gender,diagnosis_group,age))
-pat_feat.Others_dl <- pat_feat.Others %>% 
-  dplyr::select(-c(patient_id,ntest_date,trial_id,gender,diagnosis_group,age))
-
-## Generate the dataframe of significance level based on difficulty level
-sign.df_HV <- stat_diff.func(pat_feat.HV_dl,0.05,"difficulty_level")
-
-sign.df_MS <- stat_diff.func(pat_feat.MS_dl,0.05,"difficulty_level")
-
-sign.df_Others <- stat_diff.func(pat_feat.Others_dl,0.05,"difficulty_level")
-
-#### Significance based on diagnosis 
-pat_feat.diagnosis <- pat_feature %>% 
-  dplyr::select(-c(patient_id,ntest_date,difficulty_level,trial_id,gender,age))
-
-## significance at 0.05
-sign.df_diagnosis <- stat_diff.func(pat_feat.diagnosis,0.05,"diagnosis_group")
+# ## Cohort data with difficulty level
+# pat_feat.HV_dl <- pat_feat.HV %>% 
+#   dplyr::select(-c(patient_id,ntest_date,trial_id,gender,diagnosis_group,age))
+# pat_feat.MS_dl <- pat_feat.MS %>% 
+#   dplyr::select(-c(patient_id,ntest_date,trial_id,gender,diagnosis_group,age))
+# pat_feat.Others_dl <- pat_feat.Others %>% 
+#   dplyr::select(-c(patient_id,ntest_date,trial_id,gender,diagnosis_group,age))
+# 
+# ## Generate the dataframe of significance level based on difficulty level
+# sign.df_HV <- stat_diff.func(pat_feat.HV_dl,0.05,"difficulty_level")
+# 
+# sign.df_MS <- stat_diff.func(pat_feat.MS_dl,0.05,"difficulty_level")
+# 
+# sign.df_Others <- stat_diff.func(pat_feat.Others_dl,0.05,"difficulty_level")
+# 
+# #### Significance based on diagnosis 
+# pat_feat.diagnosis <- pat_feature %>% 
+#   dplyr::select(-c(patient_id,ntest_date,difficulty_level,trial_id,gender,age))
+# 
+# ## significance at 0.05
+# sign.df_diagnosis <- stat_diff.func(pat_feat.diagnosis,0.05,"diagnosis_group")
 
 ```
 
@@ -295,12 +471,12 @@ cl_feat.MS <- subset(cl_feature, diagnosis_group == "MS")
 cl_feat.Others <- subset(cl_feature, diagnosis_group == "Others")
 
 ## Remove irrelevent columns
-cl_feat.HV2 <- cl_feat.HV[,2:33]
-cl_feat.MS2 <- cl_feat.MS[,2:33]
-cl_feat.Others2 <- cl_feat.Others[,2:33]
+cl_feat.HV2 <- cl_feat.HV %>% dplyr::select(-c(1:10))
+cl_feat.MS2 <- cl_feat.MS %>% dplyr::select(-c(1:10))
+cl_feat.Others2 <- cl_feat.Others %>% dplyr::select(-c(1:10))
 
 ## significance at 0.05
-sign.df_diagnosis_cl <- stat_diff.func(cl_feature, 0.05, "diagnosis_group")
+# sign.df_diagnosis_cl <- stat_diff.func(cl_feature, 0.05, "diagnosis_group")
 
 ```
 
@@ -335,21 +511,50 @@ corrplot(res_cl.Others$r, type="upper", order="original", col = col,
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
 
-
-#### Calculate the correlation matrix with pvalue
-
-res.pat_cl <- rcorr(as.matrix(cl_feature[,2:33]),
-                    as.matrix(pat_feat.diagnosis[,2:41]), type = "pearson", #cor_type,
-                    use = "pairwise.complete.obs")
-
-## Extract the correlation and pvalue for patient features and clinical features
-r_pat_cl <- res.pat_cl$r[1:32,33:72]
-p_pat_cl <- res.pat_cl$P[1:32,33:72]
-
-## Plot
-corrplot(r_pat_cl, type="full", order="original", col = col,
+## Function to extract and plot correplot between shape drawn feature and clinical features
+mat.feat_func <- function(pat_data,cl_data, difficulty, diagnosis, dominant){
+  ## pat_data is data of shape drawn feature and cl_data is clinical feature data
+  ## difficulty is difficulty level
+  ## diagnosis is diagnosis group
+  ## dominant is if patient use dominant hand or not ("YES" or "NO")
+  pat_sub <- pat_data %>% subset(difficulty_level==difficulty) %>% 
+    dplyr::filter(dominant_hand_use==dominant, diagnosis_group==diagnosis) %>% 
+    dplyr::select(-c(1:10))
+  cl_sub <- cl_data %>% subset(difficulty_level==difficulty) %>% 
+    dplyr::filter(dominant_hand_use==dominant, diagnosis_group==diagnosis) %>% 
+    dplyr::select(-c(1:10))
+  
+  ## Calculate correlation matrix and corresponding p-value
+  cor_mat <- rcorr(as.matrix(cl_sub), as.matrix(pat_sub), type = cor_type)
+  r_pat_cl <- cor_mat$r[1:32,33:63]
+  p_pat_cl <- cor_mat$P[1:32,33:63]
+   ## plot
+  corrplot(r_pat_cl, type="full", order="original", col = col,
          p.mat = p_pat_cl, sig.level = 0.05, insig = "blank", diag = TRUE,
-         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2)
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
+} 
+
+
+############ plotting
+#### Dominant Hand
+## Healthy Cohorts
+mat.feat_func(pat_feat.dom.s,cl_feature,1,"HV","YES")
+mat.feat_func(pat_feat.dom.s,cl_feature,2,"HV","YES")
+mat.feat_func(pat_feat.dom.s,cl_feature,3,"HV","YES")
+## MS Cohorts
+mat.feat_func(pat_feat.dom.s,cl_feature,1,"MS","YES")
+mat.feat_func(pat_feat.dom.s,cl_feature,2,"MS","YES")
+mat.feat_func(pat_feat.dom.s,cl_feature,3,"MS","YES")
+
+#### Non-dominant Hand
+## Healthy Cohorts
+mat.feat_func(pat_feat.nondom.s,cl_feature,1,"HV","NO")
+mat.feat_func(pat_feat.nondom.s,cl_feature,2,"HV","NO")
+mat.feat_func(pat_feat.nondom.s,cl_feature,3,"HV","NO")
+## MS Cohorts
+mat.feat_func(pat_feat.nondom.s,cl_feature,1,"MS","NO")
+mat.feat_func(pat_feat.nondom.s,cl_feature,2,"MS","NO")
+mat.feat_func(pat_feat.nondom.s,cl_feature,3,"MS","NO")
 
 ```
 
