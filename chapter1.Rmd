@@ -175,7 +175,7 @@ cl_test  <- anti_join(cl_data_patient, cl_train, by = 'id')
 
 
 ######
-## Create a function top merge clinical and MS datasets
+## Create a function to merge clinical and MS datasets
 merge_func <- function(cl_ms, cl_data, ms_data){
   ## cl_ms is the patient MS datatset (train or test set)
   ## cl_data is the entire clinical dataset
@@ -235,7 +235,7 @@ In what follow we removed outliers using the y coordinates points by first ident
 ## Function to detect and remove outlier from a given trial
 outlier_func <- function(dataframe){
   ## dataframe is a data frame containing y coordinate
-  data_with_id <- dataframe %>% mutate(id = row_number())
+  data_with_id <- dataframe %>% dplyr::mutate(id = row_number())
   outlier_index <- tsoutliers(data_with_id$y, lambda = "auto")$index
   
   if (length(outlier_index) == 0){
