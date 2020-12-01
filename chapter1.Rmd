@@ -263,8 +263,8 @@ ms_data3 <- ms_data_train %>%
 #### create template for plot labelling
 black.bold.text1 <- element_text(face = "bold", color = "black",size=24) # x and y axis
 black.bold.text2 <- element_text(face = "bold", color = "black",size=24) # title
-Nice.Label <-theme(axis.text.x = element_text(face="bold", color="black", size=16),
-         axis.text.y = element_text(face="bold", color="black", size=16),
+Nice.Label <-theme(axis.text.x = element_text(face="bold", color="black", size=14),
+         axis.text.y = element_text(face="bold", color="black", size=14),
          title=black.bold.text2,axis.title = black.bold.text1, legend.position = "right",legend.box = "vertical",
          legend.text = element_text(size=24),strip.text.x = element_text(face="bold",size=24)) #18 or 24
 
