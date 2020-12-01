@@ -72,7 +72,7 @@ HausData_func <- function(data, xs, ys){
         for (tr in tr.levels){
           tr.level <- subset(d.level, trial_id==tr) ## select trial_id
           dim_tr <- dim(tr.level)[1] ## Make sure the dimension of each trial > 2
-          if (dim_tr>3){
+          if (dim_tr>5){
             print(c(id,tn,dl,tr)) ## to print where we are in the loop
             #ct = ct + 1 ## start a count for increment
            #print(ct) ## to check the loop is working fine 

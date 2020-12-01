@@ -323,7 +323,12 @@ corrplot(res.nondomHV_l1$r, type="upper", order="original", col = col,
 corrplot(res.domMS_l1$r, type="upper", order="original", col = col,
          p.mat = res.nondomMS_l1$P, sig.level = 0.05, insig = "blank", diag = TRUE,
          tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2)
+ ### Plot selected features
+my_dataHV <- pat_feat.nondomHV_l1[, c(1,25, 26)]
+my_dataMS <- pat_feat.nondomMS_l1[, c(1,25, 26)]
 
+PerformanceAnalytics::chart.Correlation(my_dataHV, histogram=TRUE, pch=19, method = "spearman")
+PerformanceAnalytics::chart.Correlation(my_dataMS, histogram=TRUE, pch=19, method = "spearman")
 ```
 
 

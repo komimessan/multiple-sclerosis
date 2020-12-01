@@ -28,6 +28,8 @@ library(CulturalAnalytics) ## v. 1.0.7 ## for image entropy
 library(entropy) ## v. 1.2.1 ## To use discretize2d for 2D binning 
 library(SpatEntropy) ##v. 0.1.0 ## For Image entropy using shannon
 library(ggVennDiagram) ## v. 0.3 ## for ggplot vendiagram
+library(irr) ## v. ## to calculate inter-rater reliability
+
 ```
 
 
