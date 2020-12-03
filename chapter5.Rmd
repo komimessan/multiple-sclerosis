@@ -1,0 +1,424 @@
+# Features on the entire dataset
+
+## Data cleaning and features calculation
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## get full data that have patient id in clinical dataset
+full_data <- ms_data2 %>% 
+  subset(patient_id %in% intersect(patient_id, cl_data$NeurExPatientID))
+
+full_attribute <- cl_data %>% 
+  subset(NeurExPatientID %in% full_data$patient_id) %>% 
+  dplyr::select(NeurExPatientID, diagnosis_group, gender, handedness, age) %>% 
+  dplyr::rename(dominant_hand="handedness", patient_id= "NeurExPatientID")
+
+full_data <- merge(full_attribute, full_data)
+
+```
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Clean healthy set of patients data
+HV_Patient2 <- HV_Patient %>% 
+  dplyr::group_by(patientID, difficulty) %>%
+  dplyr::mutate(ntest_date = factor(testdate, labels = 1:length(unique(testdate)))) %>% 
+  dplyr::select(trialID, patientID,x,y,t,p,ntest_date,difficulty, testdate, appendage) %>% 
+  dplyr::rename(trial_id = trialID, patient_id=patientID,difficulty_level=difficulty)
+
+HV_Patient2$t <- HV_Patient2$t/1000 ## convert time point from milliseconds to seconds 
+
+## add time that is scaled from 0 by patient_id, ntest_date, and difficulty_level and remove duplicate x, y, t
+HV_Patient2 <- HV_Patient2 %>% 
+  dplyr::group_by(patient_id, ntest_date, difficulty_level, trial_id) %>% 
+  dplyr::distinct(x,y,t,p, .keep_all = TRUE) %>% 
+  dplyr::arrange(t) %>% 
+  dplyr::mutate(pixel = row_number(), time = t-t[1])
+
+## Add column to be used later
+HV_Patient2$dominant_hand <- NA
+HV_Patient2$gender <- NA
+HV_Patient2$age <- NA
+HV_Patient2$diagnosis_group <- "HV"
+
+#### Combine Healthy Volunteers with full data
+full_cname <- c("patient_id","ntest_date","difficulty_level", "trial_id", "x","y","t","p",
+                 "pixel","diagnosis_group","time","gender","age","dominant_hand", 
+                 "appendage", "testdate")
+full_data <- as.data.frame(full_data[, full_cname])
+HV_Patient2 <- as.data.frame(HV_Patient2[, full_cname])
+full_data2 <- rbind(full_data, HV_Patient2)
+full_data2 <- full_data2[1:(dim(full_data2)[1]-1),] ## Remove unclean last row with NAs
+
+### Remove the outlier by trial group 
+ptm <- proc.time() ## Check how long it will run (takes 8.65 min to run)
+clean.full_data <- full_data2 %>% 
+  dplyr::group_by(patient_id, ntest_date, difficulty_level, trial_id) %>%
+  dplyr::group_modify(~outlier_func(.x))
+proc.time() - ptm
+
+clean.full_data2 <- as.data.frame(clean.full_data)
+
+## Clean the data and remove duplicate and arrange by time 
+clean.full_data2 <- clean.full_data2 %>% 
+  dplyr::group_by(patient_id, ntest_date, difficulty_level, trial_id) %>% 
+  dplyr::distinct(x,y,t,p, .keep_all = TRUE) %>% 
+  dplyr::arrange(patient_id, ntest_date, difficulty_level, trial_id, time)
+
+```
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+
+# #### Calculate the velocities
+# ptm <- proc.time() ## Check how long it will run (takes 50 min to run)
+# full_data.vel <- veclocity_func(as.data.frame(clean.full_data2),"x" ,"y")
+# proc.time() - ptm
+
+full_data.vel <- read.csv("full_data.velocity.csv", header = TRUE) 
+  
+## Calculate the summary statistics of velocities
+## calculate the sum, coefiicient of variation, skew for v, rv, and av
+full_data.sum <- full_data.vel %>% 
+  dplyr::group_by(patient_id,ntest_date,difficulty_level, trial_id) %>% 
+  dplyr::summarise(v_sum = sum(v_i, na.rm = TRUE), v_cv = cv(v_i), 
+            v_sk = skewness(v_i, na.rm = TRUE), v_kt = kurtosis(v_i, na.rm = TRUE), 
+            rv_sum = sum(rv_i, na.rm = TRUE), rv_cv = cv(rv_i), 
+            rv_sk = skewness(rv_i, na.rm = TRUE), rv_kt = kurtosis(rv_i, na.rm = TRUE),
+            av_sum = sum(av_i,na.rm = TRUE), av_cv = cv(av_i), 
+            av_sk = skewness(av_i, na.rm = TRUE), av_kt = kurtosis(av_i, na.rm = TRUE),
+            pressure_sum = sum(p, na.rm = TRUE))
+
+#### Power Spectral Density using Welsh periodogram with a Hamming window
+full_data.psd <- full_data.vel %>% 
+   dplyr::group_by(patient_id, ntest_date, difficulty_level, trial_id) %>%
+  dplyr::summarise(v_psd.max = max(pwelch_func(filter_func(v_i,time,7))$spec, na.rm = TRUE), 
+            v_df = pwelch_func(filter_func(v_i,time,7))$freq[which.max(pwelch_func(filter_func(v_i,time,7))$spec)],
+            rv_psd.max = max(pwelch_func(filter_func(rv_i,time,7))$spec, na.rm = TRUE),
+            rv_df = pwelch_func(filter_func(rv_i,time,7))$freq[which.max(pwelch_func(filter_func(rv_i,time,7))$spec)],
+            av_psd.max = max(pwelch_func(filter_func(av_i,time,7))$spec, na.rm = TRUE),
+            av_df = pwelch_func(filter_func(av_i,time,7))$freq[which.max(pwelch_func(filter_func(av_i,time,7))$spec)])
+
+
+
+```
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+#### calculate data frame with hausdorff distance metrics
+ptm <- proc.time() ## Take 4.077 hours
+full_data.hausD <- HausData_func(full_data.vel, "x", "y")
+proc.time() - ptm
+
+full_data.hausD <- read.csv("full_dataHausD.csv")
+
+#### calculate data frame with Area Under the curve
+ptm <- proc.time() ## Take 13 min
+full_data.Error <- Error_func(full_data.vel, "x", "y")
+proc.time() - ptm
+
+
+
+### Approximate Entropy (ApEn)
+## Interpolate all v_i, r_vi, av_i over a fixed length L = 500 (see similar approach in Creagh et al., 2020) and calculate their entropy 
+full_data.apen <- full_data.vel %>% 
+   dplyr::group_by(patient_id,ntest_date,difficulty_level, trial_id) %>%
+  dplyr::summarise(v_apen = ApEn(spline(v_i, n = 500)$y), 
+            rv_apen = ApEn(spline(rv_i, n = 500)$y), 
+            av_apen = ApEn(spline(av_i, n = 500)$y))
+
+```
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+##Extract feateares from Hausdorff distance datataframe
+full_data.hausD2 <- full_data.hausD %>% 
+  dplyr::select(patient_id, ntest_date, difficulty_level, trial_id,
+                hausD, hausDError, hausDt, hausDIqr, hausD25, hausD75, hausDmiddle, hausDmiddlet)
+full_data.hausD2$difficulty_level <- factor(full_data.hausD2$difficulty_level, labels = c("1","2","3"))
+
+##Extract feateares from Error datataframe
+full_data.Error2 <- full_data.Error %>% 
+  dplyr::select(patient_id, ntest_date, difficulty_level, trial_id,
+                ErrAUC, MSE, RMSE, Center_Sh, t_final, total_asym, true_asym, Corr, 
+                ImEntropy_pat, ImEntropy_ratio)
+full_data.Error2$difficulty_level <- factor(full_data.Error2$difficulty_level, labels = c("1","2","3"))
+
+##Extract age, diagnosis_group, and gender from Error datataframe
+full_data.stat <- full_data.Error %>% 
+  dplyr::select(patient_id, testdate, ntest_date, difficulty_level, trial_id, gender, 
+                diagnosis_group, age, appendage, dominant_hand)
+full_data.stat$difficulty_level <- factor(full_data.stat$difficulty_level, labels = c("1","2","3"))
+full_data.stat$dominant_hand <- ifelse(full_data.stat$dominant_hand=="Right","RH","LH")
+
+## Determine if patient use dominant hand or not
+full_data.stat$dominant_hand_use <- ifelse(full_data.stat$appendage==full_data.stat$dominant_hand,
+                                         "YES","NO")
+
+## Merge all fetures
+full_feature <- merge(full_data.stat, full_data.sum, by = merge_cols, all = TRUE)
+full_feature <- merge(full_feature, full_data.psd, by = merge_cols, all = TRUE)
+full_feature <- merge(full_feature, full_data.apen, by = merge_cols, all = TRUE)
+full_feature <- merge(full_feature, full_data.hausD2, by = merge_cols, all = TRUE)
+full_feature <- merge(full_feature, full_data.Error2, by = merge_cols, all = TRUE)
+
+## Change the feature name with F1 to Fn
+full.feature.name <- colnames(full_feature)[12:51]
+new_full.feature.name <- paste(rep("F",length(full.feature.name)),1:length(full.feature.name),sep = "")
+
+## To recognize which label is what column name
+full_label_table <- data.frame(Label = new_full.feature.name, Name = full.feature.name)
+
+## Change the patient feature label in dataframe
+colnames(full_feature)[12:51] <- new_full.feature.name
+
+```
+
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+#### Extract information regarding healthy patient with names "PATIENT.."  
+## Read in handedness data
+handedness_data <- read.csv("Handedness.csv")
+handedness_PATIENT <- handedness_data[grep("PATIENT", handedness_data$PatientCode),]
+
+
+####### select only the HV and MS features
+full_feature2 <- subset(full_feature, diagnosis_group %in% c("HV","MS"))
+## add dominant hand to Healthy patient with name "PatientNN"
+full_feature2[grep("PATIENT",full_feature2$patient_id), "dominant_hand"] <- "RH"
+full_feature2[, "dominant_hand_use"] <- 
+  ifelse(full_feature2$appendage==full_feature2$dominant_hand, "YES", "NO")
+
+#### Remove Training MS datasets and Training MS datasets
+## convert cl_test sets dates to Dates format
+cl_test2 <- cl_test
+cl_test2$testdate <- as.Date(cl_test2$testdate, format = "%m/%d/%Y")
+## Extract test set of MS 
+full_feature_test <- full_feature2 %>% 
+    dplyr::filter((patient_id %in% cl_test2$patient_id) & (testdate %in% cl_test2$testdate)) 
+
+full_feature_train <- anti_join(full_feature2, full_feature_test, by = c("patient_id","testdate"))
+```
+
+
+## Extraction of longitudinal data
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Extract HV and MS patients with longitudinal data
+longi_pat <- full_feature2
+longi_pat$ntest_date <- as.numeric(full_feature2$ntest_date)
+longi_pat <- unique(subset(longi_pat, ntest_date >= 6)$patient_id)
+
+longi_data <- subset(full_feature2, patient_id %in% longi_pat)
+
+### Average features by trial_id group
+longi_data.av <- longi_data %>% 
+  dplyr::select(-c(trial_id, age, gender, appendage, dominant_hand)) %>% 
+  group_by(patient_id, ntest_date, difficulty_level, diagnosis_group, dominant_hand_use) %>% 
+  dplyr::summarise_all(.funs = mean)
+  
+  
+```
+
+
+## Calculate the interclass correlation Coefficient (ICC)
+
+Given that we have test-rested (i.e. repeated measures of the same subject), it is advised in (Koo et al., 2016) to use the two-way mixed-effects model and the absolute agreement. See more detail in [here](https://www.datanovia.com/en/lessons/intraclass-correlation-coefficient-in-r/).
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+##Extract HV and MS with  
+longi_data.HV <- subset(longi_data.av, diagnosis_group=="HV")
+longi_data.MS <- subset(longi_data.av, diagnosis_group=="MS")
+
+
+## Extract dominant and non-dominant hands with difficulty levels
+longi_data.HV.doml1 <- subset(longi_data.HV, (dominant_hand_use=="YES") & difficulty_level==1)
+longi_data.HV.doml2 <- subset(longi_data.HV, (dominant_hand_use=="YES") & difficulty_level==2)
+longi_data.HV.doml3 <- subset(longi_data.HV, (dominant_hand_use=="YES") & difficulty_level==3)
+longi_data.HV.ndoml1 <- subset(longi_data.HV, (dominant_hand_use=="NO") & difficulty_level==1)
+longi_data.HV.ndoml2 <- subset(longi_data.HV, (dominant_hand_use=="NO") & difficulty_level==2)
+longi_data.HV.ndoml3 <- subset(longi_data.HV, (dominant_hand_use=="NO") & difficulty_level==3)
+
+longi_data.MS.doml1 <- subset(longi_data.MS, dominant_hand_use=="YES" & difficulty_level==1)
+longi_data.MS.doml2 <- subset(longi_data.MS, dominant_hand_use=="YES" & difficulty_level==2)
+longi_data.MS.doml3 <- subset(longi_data.MS, dominant_hand_use=="YES" & difficulty_level==3)
+longi_data.MS.ndoml1 <- subset(longi_data.MS, dominant_hand_use=="NO" & difficulty_level==1)
+longi_data.MS.ndoml2 <- subset(longi_data.MS, dominant_hand_use=="NO" & difficulty_level==2)
+longi_data.MS.ndoml3 <- subset(longi_data.MS, dominant_hand_use=="NO" & difficulty_level==3)
+
+### Create a function to calculate the ICC per features
+ICC_func <- function(data){
+  ## data is dataframe containing all the features with attributes columns (diagnosis_group etc.)
+  sub_data <- data %>% 
+    ungroup() %>% 
+    dplyr::select(-c(difficulty_level, testdate, diagnosis_group, dominant_hand_use))
+  
+  ## Function to remove columns with any NA and non-numeric value
+  not_any_na <- function(x) all(!is.na(x) & is.numeric(x))
+  n <- dim(sub_data)[2] ## get the size of the data
+  icc_vec <- rep(0, 40)
+  label <- paste(rep("F",40),1:40,sep = "")
+  
+  ## Loop through each features
+  for (j in 3:n){
+    Fj <- data.frame(patient = sub_data$patient_id, ntest = sub_data$ntest_date, 
+                     feature = sub_data[,paste("F",j-2,sep = "")])
+    ## Rearange ntest to be from 1 to n where n is the largest test that was taken
+    Fj <- Fj %>% dplyr::select(-c(ntest)) %>% 
+      group_by(patient) %>% 
+      dplyr::mutate(ntest = row_number())
+    Fj_wide <- tidyr::spread(Fj, ntest, paste("F",j-2,sep = "")) 
+    ## Remove patient column
+    Fj_wide <- Fj_wide %>% dplyr::ungroup() %>% dplyr::select(-c(patient))
+    
+    ## Remove NA columns and non-numeric
+    Fj_wide_clean <- Fj_wide %>% select_if(not_any_na)
+    ## Calculate ICC values
+    icc_val <- icc(Fj_wide_clean, model = "twoway", type = "agreement", unit = "single")$value
+    
+    ## Update the icc vector 
+    icc_vec[j-2] <- ifelse(icc_val<0,0,icc_val) ## set icc_val to 0 when it is negative
+    
+  }
+  return(data.frame(Label = label, ICC = icc_vec))
+}
+
+#### Calculate ICC values
+icc.HV.doml1 <- ICC_func(longi_data.HV.doml1)
+icc.HV.doml2 <- ICC_func(longi_data.HV.doml2)
+icc.HV.doml3 <- ICC_func(longi_data.HV.doml3)
+icc.HV.ndoml1 <- ICC_func(longi_data.HV.ndoml1)
+icc.HV.ndoml2 <- ICC_func(longi_data.HV.ndoml2)
+icc.HV.ndoml3 <- ICC_func(longi_data.HV.ndoml3)
+
+icc.MS.doml1 <- ICC_func(longi_data.MS.doml1)
+icc.MS.doml2 <- ICC_func(longi_data.MS.doml2)
+icc.MS.doml3 <- ICC_func(longi_data.MS.doml3)
+icc.MS.ndoml1 <- ICC_func(longi_data.MS.ndoml1)
+icc.MS.ndoml2 <- ICC_func(longi_data.MS.ndoml2)
+icc.MS.ndoml3 <- ICC_func(longi_data.MS.ndoml3)
+
+### Combine HV and MS
+icc.HV.MS.doml1 <- rbind(data.frame(icc.HV.doml1,Diagnosis = "HV"), 
+                         data.frame(icc.MS.doml1, Diagnosis = "MS"))
+icc.HV.MS.doml2 <- rbind(data.frame(icc.HV.doml2,Diagnosis = "HV"), 
+                         data.frame(icc.MS.doml2, Diagnosis = "MS"))
+icc.HV.MS.doml3 <- rbind(data.frame(icc.HV.doml3,Diagnosis = "HV"), 
+                         data.frame(icc.MS.doml3, Diagnosis = "MS"))
+
+icc.HV.MS.ndoml1 <- rbind(data.frame(icc.HV.ndoml1,Diagnosis = "HV"), 
+                         data.frame(icc.MS.ndoml1, Diagnosis = "MS"))
+icc.HV.MS.ndoml2 <- rbind(data.frame(icc.HV.ndoml2,Diagnosis = "HV"), 
+                         data.frame(icc.MS.ndoml2, Diagnosis = "MS"))
+icc.HV.MS.ndoml3 <- rbind(data.frame(icc.HV.ndoml3,Diagnosis = "HV"), 
+                         data.frame(icc.MS.ndoml3, Diagnosis = "MS"))
+
+```
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+
+#### create template for plot labelling
+black.bold.text1 <- element_text(face = "bold", color = "black",size=18) # x and y axis
+black.bold.text2 <- element_text(face = "bold", color = "black",size=18) # title
+Nice.Label2 <-theme(axis.text.x = element_text(face="bold", color="black", size=10),
+         axis.text.y = element_text(face="bold", color="black", size=10),
+         title=black.bold.text2,axis.title = black.bold.text1, legend.position = "bottom",
+         legend.box = "vertical", 
+         legend.text = element_text(size=24),strip.text.x = element_text(face="bold",size=24)) 
+##################
+
+
+#### Difficulty level 1
+## dominant hand Difficulty level 1 
+ggplot(icc.HV.MS.doml1, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
+    geom_bar(stat="identity", color="black", position=position_dodge()) + 
+  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_brewer(palette="Paired") +
+  theme_bw() + theme(legend.position = "bottom") + Nice.Label2
+
+## Non-dominant hand Difficulty level 1
+ggplot(icc.HV.MS.ndoml1, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
+    geom_bar(stat="identity", color="black", position=position_dodge()) + 
+  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_brewer(palette="Paired") +
+  theme_bw() + theme(legend.position = "bottom") + Nice.Label2
+
+#### Difficulty level 2
+## dominant hand Difficulty level 2 
+ggplot(icc.HV.MS.doml2, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
+    geom_bar(stat="identity", color="black", position=position_dodge()) + 
+  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_brewer(palette="Paired") +
+  theme_bw() + theme(legend.position = "bottom") + Nice.Label2
+
+## Non-dominant hand Difficulty level 2
+ggplot(icc.HV.MS.ndoml2, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
+    geom_bar(stat="identity", color="black", position=position_dodge()) + 
+  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_brewer(palette="Paired") +
+  theme_bw() + theme(legend.position = "bottom") + Nice.Label2
+
+#### Difficulty level 3
+## dominant hand Difficulty level 3 
+ggplot(icc.HV.MS.doml3, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
+    geom_bar(stat="identity", color="black", position=position_dodge()) + 
+  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_brewer(palette="Paired") +
+  theme_bw() + theme(legend.position = "bottom") + Nice.Label2
+
+## Non-dominant hand Difficulty level 3
+ggplot(icc.HV.MS.ndoml3, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
+    geom_bar(stat="identity", color="black", position=position_dodge()) + 
+  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_brewer(palette="Paired") +
+  theme_bw() + theme(legend.position = "bottom") + Nice.Label2
+
+```
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+#### Construct a function to extract data for venn diagram plotting
+ICCven_func <- function(data, alpha){
+  ## data is the dataframe containing feature labels, ICC value and diagnosis 
+  ## alpha is the level at which we assume stability of the feature [0-1]
+  
+  ## Extract the HV and MS data
+  hv_data <- subset(data, Diagnosis == "HV")
+  ms_data <- subset(data, Diagnosis == "MS")
+  
+  ## extract the stable data
+  stable_hv <- subset(hv_data, ICC>alpha)
+  stable_ms <- subset(ms_data, ICC>alpha)
+  
+  return(list(HV = stable_hv$Label, MS = stable_ms$Label))
+}
+
+ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml1,0.5), show.legend = FALSE),
+                  ggVennDiagram(ICCven_func(icc.HV.MS.ndoml1,0.5), show.legend = FALSE),
+                  labels = c("Dominant", "Non-dominant"), ncol = 1, nrow = 2)
+
+ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml2,0.5), show.legend = FALSE),
+                  ggVennDiagram(ICCven_func(icc.HV.MS.ndoml2,0.5), show.legend = FALSE),
+                  labels = c("Dominant", "Non-dominant"), ncol = 1, nrow = 2)
+
+ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml3,0.5), show.legend = FALSE),
+                  ggVennDiagram(ICCven_func(icc.HV.MS.ndoml3,0.5), show.legend = FALSE),
+                  labels = c("Dominant", "Non-dominant"), ncol = 1, nrow = 2)
+
+```
+
+
+
