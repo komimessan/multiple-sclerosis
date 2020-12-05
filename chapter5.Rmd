@@ -278,7 +278,7 @@ ICC_func <- function(data){
       dplyr::mutate(ntest = row_number())
     Fj_wide <- tidyr::spread(Fj, ntest, paste("F",j-2,sep = "")) 
     ## Remove patient column
-    Fj_wide <- Fj_wide %>% dplyr::ungroup() %>% dplyr::select(-c(patient))
+    Fj_wide <- Fj_wide %>% dplyr::ungroup() %>% dplyr::select(-c(patient)) 
     
     ## Remove NA columns and non-numeric
     Fj_wide_clean <- Fj_wide %>% select_if(not_any_na)
@@ -289,7 +289,9 @@ ICC_func <- function(data){
     icc_vec[j-2] <- ifelse(icc_val<0,0,icc_val) ## set icc_val to 0 when it is negative
     
   }
-  return(data.frame(Label = label, ICC = icc_vec))
+  result  <- data.frame(Feature = label, ICC = icc_vec)
+  result <- result %>% dplyr::mutate(Label = row_number())
+  return(result)
 }
 
 #### Calculate ICC values
@@ -329,10 +331,10 @@ icc.HV.MS.ndoml3 <- rbind(data.frame(icc.HV.ndoml3,Diagnosis = "HV"),
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
 
 #### create template for plot labelling
-black.bold.text1 <- element_text(face = "bold", color = "black",size=18) # x and y axis
-black.bold.text2 <- element_text(face = "bold", color = "black",size=18) # title
-Nice.Label2 <-theme(axis.text.x = element_text(face="bold", color="black", size=10),
-         axis.text.y = element_text(face="bold", color="black", size=10),
+black.bold.text1 <- element_text(face = "bold", color = "black",size=16) # x and y axis
+black.bold.text2 <- element_text(face = "bold", color = "black",size=16) # title
+Nice.Label2 <-theme(axis.text.x = element_text(face="bold", color="black", size=11),
+         axis.text.y = element_text(face="bold", color="black", size=11),
          title=black.bold.text2,axis.title = black.bold.text1, legend.position = "bottom",
          legend.box = "vertical", 
          legend.text = element_text(size=24),strip.text.x = element_text(face="bold",size=24)) 
@@ -343,45 +345,45 @@ Nice.Label2 <-theme(axis.text.x = element_text(face="bold", color="black", size=
 ## dominant hand Difficulty level 1 
 ggplot(icc.HV.MS.doml1, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
     geom_bar(stat="identity", color="black", position=position_dodge()) + 
-  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
-  scale_fill_brewer(palette="Paired") +
+  labs(x = "Drawing Derived Features", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_manual(values = c("slategray2","steelblue")) +
   theme_bw() + theme(legend.position = "bottom") + Nice.Label2
 
 ## Non-dominant hand Difficulty level 1
 ggplot(icc.HV.MS.ndoml1, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
     geom_bar(stat="identity", color="black", position=position_dodge()) + 
-  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
-  scale_fill_brewer(palette="Paired") +
+  labs(x = "Drawing Derived Features", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_manual(values = c("slategray2","steelblue")) +
   theme_bw() + theme(legend.position = "bottom") + Nice.Label2
 
 #### Difficulty level 2
 ## dominant hand Difficulty level 2 
 ggplot(icc.HV.MS.doml2, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
     geom_bar(stat="identity", color="black", position=position_dodge()) + 
-  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
-  scale_fill_brewer(palette="Paired") +
+  labs(x = "Drawing Derived Features", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_manual(values = c("slategray2","steelblue")) +
   theme_bw() + theme(legend.position = "bottom") + Nice.Label2
 
 ## Non-dominant hand Difficulty level 2
 ggplot(icc.HV.MS.ndoml2, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
     geom_bar(stat="identity", color="black", position=position_dodge()) + 
-  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
-  scale_fill_brewer(palette="Paired") +
+  labs(x = "Drawing Derived Features", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_manual(values = c("slategray2","steelblue")) +
   theme_bw() + theme(legend.position = "bottom") + Nice.Label2
 
 #### Difficulty level 3
 ## dominant hand Difficulty level 3 
 ggplot(icc.HV.MS.doml3, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
     geom_bar(stat="identity", color="black", position=position_dodge()) + 
-  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
-  scale_fill_brewer(palette="Paired") +
+  labs(x = "Drawing Derived Features", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_manual(values = c("slategray2","steelblue")) +
   theme_bw() + theme(legend.position = "bottom") + Nice.Label2
 
 ## Non-dominant hand Difficulty level 3
 ggplot(icc.HV.MS.ndoml3, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
     geom_bar(stat="identity", color="black", position=position_dodge()) + 
-  labs(x = " ", y = "Intraclass Correlation Coefficient") + 
-  scale_fill_brewer(palette="Paired") +
+  labs(x = "Drawing Derived Features", y = "Intraclass Correlation Coefficient") + 
+  scale_fill_manual(values = c("slategray2","steelblue")) +
   theme_bw() + theme(legend.position = "bottom") + Nice.Label2
 
 ```
@@ -403,22 +405,89 @@ ICCven_func <- function(data, alpha){
   stable_hv <- subset(hv_data, ICC>alpha)
   stable_ms <- subset(ms_data, ICC>alpha)
   
-  return(list(HV = stable_hv$Label, MS = stable_ms$Label))
+  return(list(MS = stable_ms$Feature, HV = stable_hv$Feature))
 }
+#### Difficulty level 1
 
-ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml1,0.5), show.legend = FALSE),
-                  ggVennDiagram(ICCven_func(icc.HV.MS.ndoml1,0.5), show.legend = FALSE),
+ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml1,0.75), show.legend = FALSE),
+                  ggVennDiagram(ICCven_func(icc.HV.MS.ndoml1,0.75), show.legend = FALSE),
                   labels = c("Dominant", "Non-dominant"), ncol = 1, nrow = 2)
 
-ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml2,0.5), show.legend = FALSE),
-                  ggVennDiagram(ICCven_func(icc.HV.MS.ndoml2,0.5), show.legend = FALSE),
+#### Difficulty level 2
+ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml2,0.75), show.legend = FALSE),
+                  ggVennDiagram(ICCven_func(icc.HV.MS.ndoml2,0.75), show.legend = FALSE),
                   labels = c("Dominant", "Non-dominant"), ncol = 1, nrow = 2)
 
+#### Difficulty level 3
 ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml3,0.5), show.legend = FALSE),
                   ggVennDiagram(ICCven_func(icc.HV.MS.ndoml3,0.5), show.legend = FALSE),
                   labels = c("Dominant", "Non-dominant"), ncol = 1, nrow = 2)
 
 ```
+
+## Statistical significance of Features that are highly stable by ICC (ICC>0.75)
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Conduct the wilcoxon test between HV and MS cohorts for Features that are stables by ICC>0.75
+
+#### Get Features that are stable for the Healthy Volunteers
+StableF_doml1 <- ICCven_func(icc.HV.MS.doml1,0.75)$HV
+StableF_ndoml1 <- ICCven_func(icc.HV.MS.ndoml1,0.75)$HV
+StableF_doml2 <- ICCven_func(icc.HV.MS.doml2,0.75)$HV
+StableF_ndoml2 <- ICCven_func(icc.HV.MS.ndoml2,0.75)$HV
+StableF_doml3 <- ICCven_func(icc.HV.MS.doml3,0.75)$HV
+StableF_ndoml3 <- ICCven_func(icc.HV.MS.ndoml3,0.75)$HV
+
+
+#### Second function to only calculate statistical significant differences for one DL level
+
+## Construct a function to conduct the wilcoxon test between HV and MS cohorts
+## and return features that are significant at each difficulty level
+
+wtest_func_onedl <- function(data, alpha, group_var){
+  ## Data is dataframe containing features and the first column being the categorical variables
+  ## alpha is the alpha level (e.g 0.05)
+  ## group_var is the grouping variable
+  
+  ## Remove irrelevent columns and rows
+  sub_data <- data %>% 
+    dplyr::select(diagnosis_group, grep("F",names(data), value = TRUE))
+  
+    f_numb <- dim(sub_data)[2]
+    col_names <- colnames(sub_data)[2:f_numb]
+    
+    Group <- sub_data[,group_var]
+    
+    sign_features <- c() 
+    
+    for (j in col_names){
+      fi_data <- data.frame(Group = Group, Feature = sub_data[,j])
+      res <- wilcox.test(Feature ~ Group, data = fi_data, exact = FALSE)
+      pval <- res$p.value
+      
+      if (pval < alpha){
+      sign_features <- c(sign_features, j)
+      }
+    }
+    
+  return(sign_features)
+  
+} 
+
+#############################
+
+
+## Remove all features that are stable
+full_feat_train_Sdoml1 <- full_feature_train %>% 
+  subset(difficulty_level=="1" & dominant_hand_use=="YES") %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml1,0.75)$HV)) 
+  
+  
+
+```
+
+
 
 
 

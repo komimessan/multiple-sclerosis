@@ -134,7 +134,7 @@ wtest_func <- function(data, alpha, group_var){
   
   ## difficulty levels
   d_level <- c(1,2,3)
-  ## empty vector of non-significant features
+  ## empty vector of significant features
   DL1 <- c() 
   DL2 <- c() 
   DL3 <- c() 
