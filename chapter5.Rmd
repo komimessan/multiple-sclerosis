@@ -445,14 +445,15 @@ StableF_ndoml3 <- ICCven_func(icc.HV.MS.ndoml3,0.75)$HV
 ## Construct a function to conduct the wilcoxon test between HV and MS cohorts
 ## and return features that are significant at each difficulty level
 
-wtest_func_onedl <- function(data, alpha, group_var){
+wtest_func_onedl <- function(data, alpha, group_var, Feat_ac){
   ## Data is dataframe containing features and the first column being the categorical variables
   ## alpha is the alpha level (e.g 0.05)
   ## group_var is the grouping variable
+  ## Feat_ac is the feature acronym either F or C
   
   ## Remove irrelevent columns and rows
   sub_data <- data %>% 
-    dplyr::select(diagnosis_group, grep("F",names(data), value = TRUE))
+    dplyr::select(diagnosis_group, grep(Feat_ac,names(data), value = TRUE))
   
     f_numb <- dim(sub_data)[2]
     col_names <- colnames(sub_data)[2:f_numb]
@@ -478,14 +479,137 @@ wtest_func_onedl <- function(data, alpha, group_var){
 #############################
 
 
-## Remove all features that are stable
+## Remove all features that are not stable
+## Difficulty Level 1
 full_feat_train_Sdoml1 <- full_feature_train %>% 
   subset(difficulty_level=="1" & dominant_hand_use=="YES") %>% 
   dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml1,0.75)$HV)) 
-  
-  
+full_feat_train_Sndoml1 <- full_feature_train %>% 
+  subset(difficulty_level=="1" & dominant_hand_use=="NO") %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml1,0.75)$HV)) 
+
+## Difficulty Level 2
+full_feat_train_Sdoml2 <- full_feature_train %>% 
+  subset(difficulty_level=="2" & dominant_hand_use=="YES") %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml2,0.75)$HV)) 
+full_feat_train_Sndoml2 <- full_feature_train %>% 
+  subset(difficulty_level=="2" & dominant_hand_use=="NO") %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml2,0.75)$HV)) 
+
+## Difficulty Level 3
+full_feat_train_Sdoml3 <- full_feature_train %>% 
+  subset(difficulty_level=="3" & dominant_hand_use=="YES") %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml3,0.75)$HV)) 
+full_feat_train_Sndoml3 <- full_feature_train %>% 
+  subset(difficulty_level=="3" & dominant_hand_use=="NO") %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml3,0.75)$HV)) 
+
+##### Statistical Significant Features
+## DL1
+wtest_func_onedl(full_feat_train_Sdoml1, 0.001, "diagnosis_group", "F")
+wtest_func_onedl(full_feat_train_Sndoml1, 0.001, "diagnosis_group", "F")
+
+## DL2
+wtest_func_onedl(full_feat_train_Sdoml2, 0.001, "diagnosis_group", "F")
+wtest_func_onedl(full_feat_train_Sndoml2, 0.001, "diagnosis_group", "F")
+
+## DL3
+wtest_func_onedl(full_feat_train_Sdoml2, 0.001, "diagnosis_group", "F")
+wtest_func_onedl(full_feat_train_Sndoml2, 0.001, "diagnosis_group", "F")
+
 
 ```
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+#### Here we extract clinical features that are significant at 0.001
+## First we extract HV and MS from diagnosis 
+
+cl_feature.HV.MS <- cl_data.sub %>% 
+  subset(diagnosis_group %in% c("HV","MS")) %>% 
+  dplyr::select(patient_id, testdate, neuro_testdate, apptest_to_neurotest, gender, 
+                diagnosis, diagnosis_group, dominant_hand, age, X9HPT.Avg, BMI, everything())
+colnames(cl_feature.HV.MS)[10:41] <- paste("C",1:32, sep ="")
+
+
+##### Statistical Significant Features
+wtest_func_onedl(cl_feature.HV.MS, 0.001, "diagnosis_group","C")
+
+```
+
+
+## Correlation between Patient derived features and clinical features
+
+Here we focus on patients drawing features that are stable and statistically significant and clinical features that are statistically significant at the level 0.001 and correlation were implemented between these two type of features. 
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+
+## Function to extract and plot correplot between shape drawn feature and clinical features
+## that are statistically significant
+
+mat.feat_func.onel <- function(pat_data,cl_data, diagnosis, alpha){
+  ## pat_data is data of shape drawn feature that are stable 
+  ## and cl_data is clinical feature data
+  ## diagnosis is diagnosis group
+  ## alpha is the alpha level for significance
+ 
+  
+  cl_data$testdate <- as.Date(cl_data$testdate, format = "%m/%d/%Y")
+  ## return all rowss from pat_data where there are matching in cl_data and columns from both
+  merge_data <- dplyr::left_join(pat_data, cl_data, by =c("patient_id","testdate","diagnosis_group"))
+  
+  cl_sub <- merge_data %>%  
+    dplyr::select(diagnosis_group, wtest_func_onedl(cl_data, alpha, "diagnosis_group", "C")) %>% 
+    dplyr::filter(diagnosis_group==diagnosis) %>% 
+    dplyr::select(-c(diagnosis_group))
+  
+  
+  pat_sub <- merge_data %>% 
+    dplyr::select(diagnosis_group, intersect(names(dplyr::select(merge_data,starts_with("F"))), 
+                           wtest_func_onedl(pat_data, alpha, "diagnosis_group", "F"))) %>% 
+    dplyr::filter(diagnosis_group==diagnosis) %>% 
+    dplyr::select(-c(diagnosis_group))
+  
+  
+  
+  ## Calculate correlation matrix and corresponding p-value
+  cor_mat <- rcorr(as.matrix(cl_sub), as.matrix(pat_sub), type = cor_type)
+  n <- dim(cor_mat$r)[2]
+  # r_pat_cl <- cor_mat$r[1:18,19:n]
+  # p_pat_cl <- cor_mat$P[1:18,19:n]
+  r_pat_cl <- cor_mat$r[19:n,1:18]
+  p_pat_cl <- cor_mat$P[19:n,1:18]
+   ## plot
+  corrplot(r_pat_cl, type="full", order="original", col = col,
+         p.mat = p_pat_cl, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
+} 
+
+#### Correlation plots
+
+## Difficulty Level 1
+mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"HV",0.001)
+mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"MS",0.001)
+mat.feat_func.onel(full_feat_train_Sndoml1,cl_feature.HV.MS,"HV",0.001)
+mat.feat_func.onel(full_feat_train_Sndoml1,cl_feature.HV.MS,"MS",0.001)
+
+## Difficulty Level 2
+mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"HV",0.001)
+mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"MS",0.001)
+mat.feat_func.onel(full_feat_train_Sndoml2,cl_feature.HV.MS,"HV",0.001)
+mat.feat_func.onel(full_feat_train_Sndoml2,cl_feature.HV.MS,"MS",0.001)
+
+## Difficulty Level 3
+mat.feat_func.onel(full_feat_train_Sdoml3,cl_feature.HV.MS,"HV",0.001)
+mat.feat_func.onel(full_feat_train_Sdoml3,cl_feature.HV.MS,"MS",0.001)
+mat.feat_func.onel(full_feat_train_Sndoml3,cl_feature.HV.MS,"HV",0.001)
+mat.feat_func.onel(full_feat_train_Sndoml3,cl_feature.HV.MS,"MS",0.001)
+
+```
+
 
 
 

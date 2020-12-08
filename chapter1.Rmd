@@ -158,7 +158,7 @@ cl_data.sub <- cl_data %>%
 
 ## Extracting the MS patients from clinicalm dataset
 cl_data_patient <- subset(cl_data.sub, diagnosis_group =="MS") 
-cl_data_patient <- mutate(cl_data_patient, id = row_number())
+cl_data_patient <- dplyr::mutate(cl_data_patient, id = row_number())
 
 ```
 
