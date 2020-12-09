@@ -1,0 +1,115 @@
+# Model evaluation
+
+Here we perform different model evaluation by checking how good these models can predict clinical features (e.g. 9HPT) given drawing derived features. 
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+#### First we will extract the following for dominant and non-dominant:
+## xtrain_HV, x_trainMS, x_testHV, , x_testMS, 
+## And then the following from clinical features
+## y_trainHV, y_trainMS, y_testHV, y_testMS
+all_cl_test <- cl_test2 %>% 
+  dplyr::select(patient_id, testdate, neuro_testdate, apptest_to_neurotest, gender, 
+                diagnosis, diagnosis_group, dominant_hand, age, X9HPT.Avg, BMI, everything(),-id)
+colnames(all_cl_test)[10:41] <- paste("C",1:32, sep ="")
+
+all_cl_train <- cl_train %>% 
+  dplyr::mutate(testdate = as.Date(testdate,  format = "%m/%d/%Y")) %>% 
+  dplyr::select(patient_id, testdate, neuro_testdate, apptest_to_neurotest, gender, 
+                diagnosis, diagnosis_group, dominant_hand, age, X9HPT.Avg, BMI, everything(),-id)
+colnames(all_cl_train)[10:41] <- paste("C",1:32, sep ="")
+
+all_cl_data <- cl_feature.HV.MS %>% dplyr::mutate(testdate = as.Date(testdate, format = "%m/%d/%Y"))
+
+all_full_train <- full_feature_train
+all_full_test <- full_feature_test
+
+## Construct a function that will output training and test set given difficulty level, and dominance
+
+data_func <- function(pat_data, cl_data, difficulty, alpha, dominant, diagnosis){
+  ## cl_data is all training or test clinical feature datasets
+  ## pat_data is all training or test drawing feature datasets
+  ## dominant is either "YES" or "NO" for if patient use their dominant hand
+  ## difficulty is difficulty level
+  
+  ## return all rowss from pat_data where there are matching in cl_data and columns from both
+  merge_data <- dplyr::left_join(pat_data, cl_data, 
+                                 by =c("patient_id","testdate","diagnosis_group"))
+  
+  ## select difficulty level and dominant hand use
+  merge_l1 <- merge_data %>% subset(difficulty_level==difficulty & dominant_hand_use==dominant)
+  
+  ## Obtain features that are not stable previously calculated in Chapter5
+  if((difficulty==1) & (dominant=="YES")){
+    non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml1,0.75)$HV)
+  } else if((difficulty==1) & (dominant=="NO")){
+    non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml1,0.75)$HV)
+  } else if((difficulty==2) & (dominant=="YES")) {
+    non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml2,0.75)$HV)
+  } else if((difficulty==2) & (dominant=="NO")){
+     non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml2,0.75)$HV)
+  } else if ((difficulty==3) & (dominant=="YES")){
+     non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml3,0.75)$HV)
+  } else {
+     non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml3,0.75)$HV)
+  }
+  
+  ## Select stable and significant clinical and patient features
+    pat_sub <- merge_l1 %>% dplyr::select(-non_stable_Feat) 
+    pat_sub <- pat_sub %>% 
+      dplyr::select(diagnosis_group, intersect(names(dplyr::select(merge_l1,starts_with("F"))), 
+                           wtest_func_onedl(pat_sub, alpha, "diagnosis_group", "F"))) %>% 
+      dplyr::filter(diagnosis_group==diagnosis) %>% 
+      dplyr::select(-c(diagnosis_group))
+    
+    cl_sub <- merge_l1 %>%  
+      dplyr::select(diagnosis_group, wtest_func_onedl(cl_data, alpha, "diagnosis_group", "C")) %>% 
+      dplyr::filter(diagnosis_group==diagnosis) %>% 
+      dplyr::select(-c(diagnosis_group))
+    
+    ## Delete the rows with NA
+    merge2 <- na.omit(cbind(pat_sub, cl_sub))
+    ## Extract the patient and clinical feature data
+    pat_sub2 <- merge2 %>% dplyr::select(grep("F",names(merge2), value = TRUE))
+    cl_sub2 <- merge2 %>% dplyr::select(grep("C",names(merge2), value = TRUE))
+    
+    return(list(X_mat = pat_sub2, y_mat = cl_sub2))
+}
+
+
+try <- data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")
+
+```
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+### Try Lasso Regression
+x_train1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")$X_mat)
+x_train2 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","MS")$X_mat)
+
+y_train <- data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")$y_mat[,1]
+
+
+grid = 10^seq(10, -2, length = 100)
+
+lasso_mod = glmnet::glmnet(x_train1, 
+                   y_train, 
+                   alpha = 1, 
+                   lambda = grid) # Fit lasso model on training data
+
+
+set.seed(1)
+cv.out = cv.glmnet(x_train1, y_train, alpha = 1) # Fit lasso model on training data
+plot(cv.out) # Draw plot of training MSE as a function of lambda
+
+
+bestlam = cv.out$lambda.min # Select lamda that minimizes training MSE
+lasso_pred = predict(lasso_mod, s = bestlam, newx = x_test) # Use best lambda to predict test data
+mean((lasso_pred - y_test)^2) # Calculate test MSE
+
+```
+
+
+

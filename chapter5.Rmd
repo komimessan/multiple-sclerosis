@@ -419,8 +419,8 @@ ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml2,0.75), show.legend =
                   labels = c("Dominant", "Non-dominant"), ncol = 1, nrow = 2)
 
 #### Difficulty level 3
-ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml3,0.5), show.legend = FALSE),
-                  ggVennDiagram(ICCven_func(icc.HV.MS.ndoml3,0.5), show.legend = FALSE),
+ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml3,0.75), show.legend = FALSE),
+                  ggVennDiagram(ICCven_func(icc.HV.MS.ndoml3,0.75), show.legend = FALSE),
                   labels = c("Dominant", "Non-dominant"), ncol = 1, nrow = 2)
 
 ```
@@ -537,6 +537,18 @@ colnames(cl_feature.HV.MS)[10:41] <- paste("C",1:32, sep ="")
 ##### Statistical Significant Features
 wtest_func_onedl(cl_feature.HV.MS, 0.001, "diagnosis_group","C")
 
+## Clinical feature with features that are significant
+cl_feat_sign <- cl_feature.HV.MS %>% 
+  dplyr::select(diagnosis_group,wtest_func_onedl(cl_feature.HV.MS, 0.001, "diagnosis_group","C")) 
+
+cl_feat_signHV <- cl_feat_sign %>% 
+  dplyr::filter(diagnosis_group=="HV") %>% 
+  dplyr::select(-c(diagnosis_group))
+
+cl_feat_signMS <- cl_feat_sign %>% 
+  dplyr::filter(diagnosis_group=="MS") %>% 
+  dplyr::select(-c(diagnosis_group))
+
 ```
 
 
@@ -582,10 +594,12 @@ mat.feat_func.onel <- function(pat_data,cl_data, diagnosis, alpha){
   # p_pat_cl <- cor_mat$P[1:18,19:n]
   r_pat_cl <- cor_mat$r[19:n,1:18]
   p_pat_cl <- cor_mat$P[19:n,1:18]
+  n_pat_cl <- cor_mat$n[19:n,1:18]
    ## plot
   corrplot(r_pat_cl, type="full", order="original", col = col,
          p.mat = p_pat_cl, sig.level = 0.05, insig = "blank", diag = TRUE,
          tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
+  return(list(r=r_pat_cl, P=p_pat_cl, n=n_pat_cl))
 } 
 
 #### Correlation plots
@@ -608,8 +622,66 @@ mat.feat_func.onel(full_feat_train_Sdoml3,cl_feature.HV.MS,"MS",0.001)
 mat.feat_func.onel(full_feat_train_Sndoml3,cl_feature.HV.MS,"HV",0.001)
 mat.feat_func.onel(full_feat_train_Sndoml3,cl_feature.HV.MS,"MS",0.001)
 
+###### Correlation plot of the significant clinical features
+## Healthy Cohorts
+res_cl.HV.S <- rcorr(as.matrix(cl_feat_signHV), type = cor_type)
+
+corrplot(res_cl.HV.S$r, type="upper", order="original", col = col,
+         p.mat = res_cl.HV.S$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
+
+
+## MS Cohorts
+res_cl.MS.S <- rcorr(as.matrix(cl_feat_signMS), type = cor_type)
+
+corrplot(res_cl.MS.S$r, type="upper", order="original", col = col,
+         p.mat = res_cl.MS.S$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
+
 ```
 
+
+## Clinical feature selection
+Here we will select only a number of clinical features using high correlation test and also removing features that havce all 0 in the Healthy cohorts (Feature 15, 16, 26, 27, and 28)
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+## First we remove features that are 0 in the healthy cohorts and also features that are highly correlated
+
+## Healthy Cohorst
+cl_feat_signHV2 <- cl_feat_signHV %>% dplyr::select(-c(C15, C16, C26, C27, C28))
+res_cl.HV.S2 <- rcorr(as.matrix(cl_feat_signHV2), type = cor_type)
+
+cl_feat_signHV2 <- cl_feat_signHV2 %>%
+  dplyr::select(-caret::findCorrelation(na.omit(res_cl.HV.S2$r), cutoff = 0.7, names = TRUE))
+
+## MS Cohorts
+cl_feat_signMS2 <- cl_feat_signMS %>%
+  dplyr::select(-caret::findCorrelation(na.omit(res_cl.MS.S$r), cutoff = 0.7, names = TRUE))
+
+
+###### Correlation plot of the significant clinical features
+## Healthy Cohorts
+res_cl.HV.S2 <- rcorr(as.matrix(cl_feat_signHV2), type = cor_type)
+
+corrplot(res_cl.HV.S2$r, type="upper", order="original", col = col,
+         p.mat = res_cl.HV.S2$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
+
+
+## MS Cohorts
+res_cl.MS.S2 <- rcorr(as.matrix(cl_feat_signMS2), type = cor_type)
+
+corrplot(res_cl.MS.S2$r, type="upper", order="original", col = col,
+         p.mat = res_cl.MS.S2$P, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
+
+# data1 <- full_feat_train_Sdoml3
+# View(rcorr(as.matrix(subset(data1 %>% dplyr::select(diagnosis_group, wtest_func_onedl(data1, 0.001, "diagnosis_group","F")), diagnosis_group=="HV")[,-1]), type = cor_type)$r)
+
+## rcorr(as.matrix(full_feat_train_Sdoml1 %>% dplyr::select(wtest_func_onedl(full_feat_train_Sdoml1, 0.001, "diagnosis_group","F"))))$r
+```
 
 
 
