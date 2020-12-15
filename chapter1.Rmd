@@ -31,7 +31,7 @@ library(ggVennDiagram) ## v. 0.3 ## for ggplot vendiagram
 library(irr) ## v. ## to calculate inter-rater reliability
 library(robust) ## v.0.5.0.0 ## To calculate true correlation that is not sensitive to outliers covRob
 library(glmnet) ## v. 4.0.2 ## For Lasso regression
-
+library(ipflasso) ##v. 1.1 ## For Lasso regression with repeated cross-validation
 ```
 
 

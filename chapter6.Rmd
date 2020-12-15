@@ -21,6 +21,8 @@ colnames(all_cl_train)[10:41] <- paste("C",1:32, sep ="")
 
 all_cl_data <- cl_feature.HV.MS %>% dplyr::mutate(testdate = as.Date(testdate, format = "%m/%d/%Y"))
 
+
+#### Patient derived features
 all_full_train <- full_feature_train
 all_full_test <- full_feature_test
 
@@ -31,13 +33,6 @@ data_func <- function(pat_data, cl_data, difficulty, alpha, dominant, diagnosis)
   ## pat_data is all training or test drawing feature datasets
   ## dominant is either "YES" or "NO" for if patient use their dominant hand
   ## difficulty is difficulty level
-  
-  ## return all rowss from pat_data where there are matching in cl_data and columns from both
-  merge_data <- dplyr::left_join(pat_data, cl_data, 
-                                 by =c("patient_id","testdate","diagnosis_group"))
-  
-  ## select difficulty level and dominant hand use
-  merge_l1 <- merge_data %>% subset(difficulty_level==difficulty & dominant_hand_use==dominant)
   
   ## Obtain features that are not stable previously calculated in Chapter5
   if((difficulty==1) & (dominant=="YES")){
@@ -54,11 +49,27 @@ data_func <- function(pat_data, cl_data, difficulty, alpha, dominant, diagnosis)
      non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml3,0.75)$HV)
   }
   
+  #### Extract the stable and significant feature from drawing derived features
+   ## return all rowss from pat_data where there are matching in cl_data and columns from both
+  merge_data <- dplyr::left_join(pat_data, cl_data, 
+                                 by =c("patient_id","testdate","diagnosis_group"))
+  
+  #### Always filter the features based on the training set data since
+  #### test set does not have HV
+  
+  merge_data_train <- dplyr::left_join(all_full_train, cl_data, 
+                                 by =c("patient_id","testdate","diagnosis_group"))
+  ## select difficulty level and dominant hand use
+  merge_l1 <- merge_data %>% subset(difficulty_level==difficulty & dominant_hand_use==dominant)
+  merge_l1_train <- merge_data_train %>% subset(difficulty_level==difficulty & dominant_hand_use==dominant)
+  
   ## Select stable and significant clinical and patient features
     pat_sub <- merge_l1 %>% dplyr::select(-non_stable_Feat) 
+    pat_sub_train <- merge_l1_train %>% dplyr::select(-non_stable_Feat) 
+    
     pat_sub <- pat_sub %>% 
-      dplyr::select(diagnosis_group, intersect(names(dplyr::select(merge_l1,starts_with("F"))), 
-                           wtest_func_onedl(pat_sub, alpha, "diagnosis_group", "F"))) %>% 
+      dplyr::select(diagnosis_group, intersect(names(dplyr::select(merge_l1_train,starts_with("F"))), 
+                           wtest_func_onedl(pat_sub_train, alpha, "diagnosis_group", "F"))) %>% 
       dplyr::filter(diagnosis_group==diagnosis) %>% 
       dplyr::select(-c(diagnosis_group))
     
@@ -66,7 +77,7 @@ data_func <- function(pat_data, cl_data, difficulty, alpha, dominant, diagnosis)
       dplyr::select(diagnosis_group, wtest_func_onedl(cl_data, alpha, "diagnosis_group", "C")) %>% 
       dplyr::filter(diagnosis_group==diagnosis) %>% 
       dplyr::select(-c(diagnosis_group))
-    
+
     ## Delete the rows with NA
     merge2 <- na.omit(cbind(pat_sub, cl_sub))
     ## Extract the patient and clinical feature data
@@ -77,7 +88,124 @@ data_func <- function(pat_data, cl_data, difficulty, alpha, dominant, diagnosis)
 }
 
 
-try <- data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")
+#try <- data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")
+
+```
+
+
+Description on how to perform Lasso with Cross-validation is display in [document](http://www.science.smith.edu/~jcrouser/SDS293/labs/lab10-r.html).
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+#### Lasso Regression
+
+#### Construct a function to do a reapeated Kfold CV with Lasso
+## Find the best lambda that minimize MSE
+## 100 cross validations and take the average of the mean error curves
+## and report the mlambda, MSE minimum and corresponding SD
+rcv_lasso_func <- function(X,y, k, r){
+  ## X is the data to conduct lasso regression on and y is the dependent variable
+  ## k is the number of kfold to conduct
+  ## r is the repetiton 
+  
+  ## Calculate the correlation coefficient between clinical and features
+  Cor_df <- data.frame(Feature = character(),Rps=double(),Pps=double(),Rsp=double(),Psp=double())
+  
+  nX <- dim(X)[2]
+  
+  for (j in 1:nX){
+    Cor_df[j,"Rps"] <- cor.test(as.numeric(X[,j]),as.numeric(y), method = "pearson")$estimate
+    Cor_df[j,"Pps"] <- cor.test(as.numeric(X[,j]),as.numeric(y), method = "pearson")$p.value
+    Cor_df[j,"Rsp"] <- cor.test(as.numeric(X[,j]),as.numeric(y), method = "spearman", exact = FALSE)$estimate
+    Cor_df[j,"Psp"] <- cor.test(as.numeric(X[,j]),as.numeric(y), method = "spearman", exact = FALSE)$p.value
+  }
+  
+  Cor_df$Feature <- colnames(X)
+  
+  ## Dtermine relevent feature by lasso Cross-Validation
+
+  MSEs <- NULL
+  SDs <- NULL
+  Coeffs <- NULL
+  for (i in 1:r){
+    cv <- cv.glmnet(X, y, alpha=1, nfolds=k, intercept=FALSE)  
+    MSEs <- cbind(MSEs, cv$cvm)
+    SDs <- cbind(SDs, cv$cvsd)
+    Coeffs <- cbind(Coeffs, coef(cv))
+  }
+  MSEs <- as.data.frame(MSEs) %>% dplyr::mutate(MSEmean=rowMeans(.), lambda=cv$lambda)
+  SDs <- as.data.frame(SDs) %>% dplyr::mutate(SDmean=rowMeans(.), MSEmean=MSEs$MSEmean, 
+                                              lambda = cv$lambda)
+  
+  ## Get lambda, and SD corresponding to lowest MSE average
+  lambda.min <- SDs$lambda[which.min(SDs$MSEmean)] ## lambda 
+  MSEmin <- min(SDs$MSEmean) ## MSE average
+  SDmin <- SDs$SDmean[which.min(SDs$MSEmean)]
+  
+  ## Transform coefficient data to matrix
+  Coeffs <- as(Coeffs, "lgCMatrix")
+  Coeffs@x[]<- TRUE
+  Coeffs <- as.data.frame((as.matrix(Coeffs)))
+  
+  ## Count the number of times and percentage of time Features was calculated
+  Coeffs$Count <- apply(Coeffs,1,function(x) length(which(x==TRUE)))
+  Coeffs$Perc <- (Coeffs$Count/r)*100
+  
+  Sub_Coeffs <- Coeffs %>% dplyr::select(Count, Perc)
+  
+  return(list(lambda=lambda.min, MSE=MSEmin, SD=SDmin, Coeffs = Sub_Coeffs, Cor = Cor_df))
+}
+
+
+####Extract the data for Lasso CV
+## Difficulty Level 1
+## Dominant HV and MS Cohorts
+x_train.domHV.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")$X_mat)
+y_train.domHV.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")$y_mat)
+x_train.domMS.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","MS")$X_mat)
+y_train.domMS.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","MS")$y_mat)
+## Non-dominant HV and MS Cohorts
+x_train.ndomHV.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"NO","HV")$X_mat)
+y_train.ndomHV.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"NO","HV")$y_mat)
+x_train.ndomMS.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"NO","MS")$X_mat)
+y_train.ndomMS.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"NO","MS")$y_mat)
+
+
+#### View the data with relevent features
+View(rcv_lasso_func(x_train.domHV.l1,y_train.domHV.l1[,1], 5, 20)$Coeffs)
+View(rcv_lasso_func(x_train.domHV.l1,y_train.domHV.l1[,1], 5, 20)$Cor)
+
+View(rcv_lasso_func(x_train.ndomHV.l1,y_train.ndomHV.l1[,1], 5, 20)$Coeffs)
+View(rcv_lasso_func(x_train.ndomHV.l1,y_train.ndomHV.l1[,1], 5, 20)$Cor)
+
+
+grid = 10^seq(12, -2, length = 200)
+
+# Fit lasso model on training data
+lasso_mod = glmnet::glmnet(x_train.domMS.l1, y_train.domMS.l1[,2], alpha = 1, lambda = grid) 
+
+
+set.seed(1)
+# Fit lasso model on training data
+cv.out = cv.glmnet(x_train.domMS.l1, y_train.domMS.l1[,2], alpha = 1, intercept =
+                     FALSE, lambda = grid) 
+plot(cv.out) # Draw plot of training MSE as a function of lambda
+
+
+bestlam = cv.out$lambda.min # Select lamda that minimizes training MSE
+lasso_pred = predict(lasso_mod, s = bestlam, newx = x_test.domMS.l1) # Use best lambda to predict test data
+mean((lasso_pred - y_test.domMS.l1[,2])^2) # Calculate test MSE
+
+
+# Display coefficients using lambda chosen by CV
+lasso_coef = predict(cv.out, type = "coefficients", s = bestlam)[1:9,] 
+lasso_coef
+
+# Display only non-zero coefficients
+lasso_coef[lasso_coef != 0] 
+
+
 
 ```
 
@@ -85,31 +213,10 @@ try <- data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
-### Try Lasso Regression
-x_train1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")$X_mat)
-x_train2 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","MS")$X_mat)
-
-y_train <- data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")$y_mat[,1]
-
-
-grid = 10^seq(10, -2, length = 100)
-
-lasso_mod = glmnet::glmnet(x_train1, 
-                   y_train, 
-                   alpha = 1, 
-                   lambda = grid) # Fit lasso model on training data
-
-
-set.seed(1)
-cv.out = cv.glmnet(x_train1, y_train, alpha = 1) # Fit lasso model on training data
-plot(cv.out) # Draw plot of training MSE as a function of lambda
-
-
-bestlam = cv.out$lambda.min # Select lamda that minimizes training MSE
-lasso_pred = predict(lasso_mod, s = bestlam, newx = x_test) # Use best lambda to predict test data
-mean((lasso_pred - y_test)^2) # Calculate test MSE
 
 ```
+
+
 
 
 
