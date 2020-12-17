@@ -125,7 +125,7 @@ filter_func <- function(x, t, fc){
 
 
 
-#### Function to create plotting data point acconrding to true spiral appendage
+#### Function to create plotting data point according to true spiral appendage
 
 spiral_data_func <- function(data, patientID, ntest){
   ## data is the dataframe

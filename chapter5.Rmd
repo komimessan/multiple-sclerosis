@@ -85,10 +85,10 @@ full_data.sum <- full_data.vel %>%
   dplyr::group_by(patient_id,ntest_date,difficulty_level, trial_id) %>% 
   dplyr::summarise(v_sum = sum(v_i, na.rm = TRUE), v_cv = cv(v_i), 
             v_sk = skewness(v_i, na.rm = TRUE), v_kt = kurtosis(v_i, na.rm = TRUE), 
-            rv_sum = sum(rv_i, na.rm = TRUE), rv_cv = cv(rv_i), 
-            rv_sk = skewness(rv_i, na.rm = TRUE), rv_kt = kurtosis(rv_i, na.rm = TRUE),
-            av_sum = sum(av_i,na.rm = TRUE), av_cv = cv(av_i), 
-            av_sk = skewness(av_i, na.rm = TRUE), av_kt = kurtosis(av_i, na.rm = TRUE),
+            rv_sum = sum(abs(rv_i), na.rm = TRUE), rv_cv = cv(abs(rv_i)), 
+            rv_sk = skewness(abs(rv_i), na.rm = TRUE), rv_kt = kurtosis(abs(rv_i), na.rm = TRUE),
+            av_sum = sum(abs(av_i), na.rm = TRUE), av_cv = cv(abs(av_i)), 
+            av_sk = skewness(abs(av_i), na.rm = TRUE), av_kt = kurtosis(abs(av_i), na.rm = TRUE),
             pressure_sum = sum(p, na.rm = TRUE))
 
 #### Power Spectral Density using Welsh periodogram with a Hamming window
@@ -110,18 +110,18 @@ full_data.psd <- full_data.vel %>%
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
 #### calculate data frame with hausdorff distance metrics
-ptm <- proc.time() ## Take 4.077 hours
-full_data.hausD <- HausData_func(full_data.vel, "x", "y")
-proc.time() - ptm
+# ptm <- proc.time() ## Take 4.077 hours
+# full_data.hausD <- HausData_func(full_data.vel, "x", "y")
+# proc.time() - ptm
 
 full_data.hausD <- read.csv("full_dataHausD.csv")
 
 #### calculate data frame with Area Under the curve
-ptm <- proc.time() ## Take 13 min
-full_data.Error <- Error_func(full_data.vel, "x", "y")
-proc.time() - ptm
+# ptm <- proc.time() ## Take 13 min
+# full_data.Error <- Error_func(full_data.vel, "x", "y")
+# proc.time() - ptm
 
-
+full_data.Error <- read.csv("full_dataError.csv")
 
 ### Approximate Entropy (ApEn)
 ## Interpolate all v_i, r_vi, av_i over a fixed length L = 500 (see similar approach in Creagh et al., 2020) and calculate their entropy 
@@ -575,6 +575,7 @@ mat.feat_func.onel <- function(pat_data,cl_data, diagnosis, alpha){
  
   
   cl_data$testdate <- as.Date(cl_data$testdate, format = "%m/%d/%Y")
+  pat_data$testdate <- as.Date(pat_data$testdate) 
   ## return all rowss from pat_data where there are matching in cl_data and columns from both
   merge_data <- dplyr::left_join(pat_data, cl_data, by =c("patient_id","testdate","diagnosis_group"))
   
@@ -585,8 +586,8 @@ mat.feat_func.onel <- function(pat_data,cl_data, diagnosis, alpha){
   
   
   pat_sub <- merge_data %>% ungroup() %>% 
-    dplyr::select(diagnosis_group, intersect(names(dplyr::select(merge_data %>% ungroup(),starts_with("F"))), 
-                           wtest_func_onedl(pat_data, alpha, "diagnosis_group", "F"))) %>% 
+    dplyr::select(diagnosis_group, intersect(names(dplyr::select(merge_data %>% ungroup(),starts_with("F"))), wtest_func_onedl(pat_data, alpha, "diagnosis_group", "F"))) %>%
+    # dplyr::select(diagnosis, paste("F",1:40, sep = "")) %>% 
     dplyr::filter(diagnosis_group==diagnosis) %>% 
     dplyr::select(-c(diagnosis_group))
   
@@ -594,18 +595,20 @@ mat.feat_func.onel <- function(pat_data,cl_data, diagnosis, alpha){
   
   ## Calculate correlation matrix and corresponding p-value
   cor_mat <- rcorr(as.matrix(cl_sub), as.matrix(pat_sub), type = cor_type)
+  ## number of clinical features and correlation matrix size
+  n_cl <- dim(cl_sub)[2]
   n <- dim(cor_mat$r)[2]
   # r_pat_cl <- cor_mat$r[1:18,19:n]
   # p_pat_cl <- cor_mat$P[1:18,19:n]
-  # r_pat_cl <- cor_mat$r[19:n,1:18]
-  # p_pat_cl <- cor_mat$P[19:n,1:18]
-  # n_pat_cl <- cor_mat$n[19:n,1:18]
+  r_pat_cl <- cor_mat$r[(n_cl+1):n,1:n_cl]
+  p_pat_cl <- cor_mat$P[(n_cl+1):n,1:n_cl]
+  n_pat_cl <- cor_mat$n[(n_cl+1):n,1:n_cl]
   #  ## plot
-  # corrplot(r_pat_cl, type="full", order="original", col = col,
-  #        p.mat = p_pat_cl, sig.level = 0.05, insig = "blank", diag = TRUE,
-  #        tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
-  # return(list(cl_data =cl_sub, pat_data=pat_sub, r=r_pat_cl, P=p_pat_cl, n=n_pat_cl))
-  return(list(cl_data =cl_sub, pat_data=pat_sub))
+  corrplot(r_pat_cl, type="full", order="original", col = col,
+         p.mat = p_pat_cl, sig.level = 0.05, insig = "blank", diag = TRUE,
+         tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
+  return(list(cl_data =cl_sub, pat_data=pat_sub, r=r_pat_cl, P=p_pat_cl, n=n_pat_cl))
+  # return(list(cl_data =cl_sub, pat_data=pat_sub))
 } 
 
 #### Correlation plots
@@ -709,6 +712,17 @@ corrplot(res_cl.MS.S2$r, type="upper", order="original", col = col,
 # View(rcorr(as.matrix(subset(data1 %>% dplyr::select(diagnosis_group, wtest_func_onedl(data1, 0.001, "diagnosis_group","F")), diagnosis_group=="HV")[,-1]), type = cor_type)$r)
 
 ## rcorr(as.matrix(full_feat_train_Sdoml1 %>% dplyr::select(wtest_func_onedl(full_feat_train_Sdoml1, 0.001, "diagnosis_group","F"))))$r
+
+MSdoml1 <- subset(full_feature_train, dominant_hand_use=="YES" & diagnosis_group=="MS" & difficulty_level==1)
+MSdoml1p <- tidyr::gather(MSdoml1[,-c(1:11)], Feature, Value, F1:F40, factor_key = TRUE)
+
+
+ggplot(MSdoml1p, aes(x=Value)) + geom_histogram() + facet_wrap(~Feature, scales = "free")
+
+
+sub1_MSdoml1 <- dplyr::filter(MSdoml1, F5<0)
+sub2_MSdoml1 <- dplyr::filter(MSdoml1, F5>0)
+
 ```
 
 
