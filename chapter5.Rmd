@@ -429,16 +429,6 @@ ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml3,0.75), show.legend =
 
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
-## Conduct the wilcoxon test between HV and MS cohorts for Features that are stables by ICC>0.75
-
-#### Get Features that are stable for the Healthy Volunteers
-StableF_doml1 <- ICCven_func(icc.HV.MS.doml1,0.75)$HV
-StableF_ndoml1 <- ICCven_func(icc.HV.MS.ndoml1,0.75)$HV
-StableF_doml2 <- ICCven_func(icc.HV.MS.doml2,0.75)$HV
-StableF_ndoml2 <- ICCven_func(icc.HV.MS.ndoml2,0.75)$HV
-StableF_doml3 <- ICCven_func(icc.HV.MS.doml3,0.75)$HV
-StableF_ndoml3 <- ICCven_func(icc.HV.MS.ndoml3,0.75)$HV
-
 
 #### Second function to only calculate statistical significant differences for one DL level
 
@@ -483,31 +473,42 @@ wtest_func_onedl <- function(data, alpha, group_var, Feat_ac){
 
 #############################
 
+## Conduct the wilcoxon test between HV and MS cohorts for Features that are stables by ICC>0.5
+
+#### Get Features that are stable for the Healthy Volunteers
+StableF_doml1 <- ICCven_func(icc.HV.MS.doml1,0.5)$HV
+StableF_ndoml1 <- ICCven_func(icc.HV.MS.ndoml1,0.5)$HV
+StableF_doml2 <- ICCven_func(icc.HV.MS.doml2,0.5)$HV
+StableF_ndoml2 <- ICCven_func(icc.HV.MS.ndoml2,0.5)$HV
+StableF_doml3 <- ICCven_func(icc.HV.MS.doml3,0.5)$HV
+StableF_ndoml3 <- ICCven_func(icc.HV.MS.ndoml3,0.5)$HV
+
+#####################
 
 ## Remove all features that are not stable
 ## Difficulty Level 1
 full_feat_train_Sdoml1 <- full_feature_train %>% 
   subset(difficulty_level=="1" & dominant_hand_use=="YES") %>% 
-  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml1,0.75)$HV)) 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), StableF_doml1)) 
 full_feat_train_Sndoml1 <- full_feature_train %>% 
   subset(difficulty_level=="1" & dominant_hand_use=="NO") %>% 
-  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml1,0.75)$HV)) 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), StableF_ndoml1)) 
 
 ## Difficulty Level 2
 full_feat_train_Sdoml2 <- full_feature_train %>% 
   subset(difficulty_level=="2" & dominant_hand_use=="YES") %>% 
-  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml2,0.75)$HV)) 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), StableF_doml2)) 
 full_feat_train_Sndoml2 <- full_feature_train %>% 
   subset(difficulty_level=="2" & dominant_hand_use=="NO") %>% 
-  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml2,0.75)$HV)) 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), StableF_ndoml2)) 
 
 ## Difficulty Level 3
 full_feat_train_Sdoml3 <- full_feature_train %>% 
   subset(difficulty_level=="3" & dominant_hand_use=="YES") %>% 
-  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml3,0.75)$HV)) 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), StableF_doml3)) 
 full_feat_train_Sndoml3 <- full_feature_train %>% 
   subset(difficulty_level=="3" & dominant_hand_use=="NO") %>% 
-  dplyr::select(-setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml3,0.75)$HV)) 
+  dplyr::select(-setdiff(paste("F",1:40,sep =""), StableF_ndoml3)) 
 
 ##### Statistical Significant Features
 ## DL1
@@ -632,24 +633,24 @@ mat.feat_func.onel(full_feat_train_Sndoml3,cl_feature.HV.MS,"HV",0.001)
 mat.feat_func.onel(full_feat_train_Sndoml3,cl_feature.HV.MS,"MS",0.001)
 #### Investigate correlation through chart plot
 
-#### Significant in HV but not in MS
-try <- full_feat_train_Sdoml1 %>% dplyr::select(-c(trial_id, age, gender, appendage, dominant_hand, dominant_hand_use, difficulty_level)) %>% 
-    group_by(patient_id, ntest_date, diagnosis_group) %>% 
-    dplyr::summarise_all(.funs = mean)
+# #### Significant in HV but not in MS
+# try <- full_feat_train_Sdoml1 %>% dplyr::select(-c(trial_id, age, gender, appendage, dominant_hand, dominant_hand_use, difficulty_level)) %>% 
+#     group_by(patient_id, ntest_date, diagnosis_group) %>% 
+#     dplyr::summarise_all(.funs = mean)
+# 
+# try <- subset(full_feat_train_Sdoml1, age<50)
+# 
+# data11 <- na.omit(data.frame(mat.feat_func.onel(try,cl_feature.HV.MS,"HV",0.001)$pat_data[,c("F5","F38")], mat.feat_func.onel(try,cl_feature.HV.MS,"HV",0.001)$cl_data[,c("C8","C21")]))
+# data12 <- na.omit(data.frame(mat.feat_func.onel(try,cl_feature.HV.MS,"MS",0.001)$pat_data[,c("F5","F38")], mat.feat_func.onel(try,cl_feature.HV.MS,"MS",0.001)$cl_data[,c("C8","C21")]))
 
-try <- subset(full_feat_train_Sdoml1, age<50)
 
-data11 <- na.omit(data.frame(mat.feat_func.onel(try,cl_feature.HV.MS,"HV",0.001)$pat_data[,c("F5","F38")], mat.feat_func.onel(try,cl_feature.HV.MS,"HV",0.001)$cl_data[,c("C8","C21")]))
-data12 <- na.omit(data.frame(mat.feat_func.onel(try,cl_feature.HV.MS,"MS",0.001)$pat_data[,c("F5","F38")], mat.feat_func.onel(try,cl_feature.HV.MS,"MS",0.001)$cl_data[,c("C8","C21")]))
-
-
-data11 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"HV",0.001)$pat_data[,c("F5","F38")], mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"HV",0.001)$cl_data[,c("C8","C21")]))
-data12 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"MS",0.001)$pat_data[,c("F5","F38")], mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"MS",0.001)$cl_data[,c("C8","C21")]))
+data11 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"HV",0.001)$pat_data[,c("F29","F38")], mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"HV",0.001)$cl_data[,c("C1","C9")]))
+data12 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"MS",0.001)$pat_data[,c("F29","F38")], mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"MS",0.001)$cl_data[,c("C1","C9")]))
 
 PerformanceAnalytics::chart.Correlation(data11, histogram=TRUE, pch=19, method = "spearman")
 
-data21 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"HV",0.001)$pat_data[,c("F6","F11","F26")], mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"HV",0.001)$cl_data[,c("C14","C8")]))
-data22 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"MS",0.001)$pat_data[,c("F6","F11","F26")], mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"MS",0.001)$cl_data[,c("C14","C8")]))
+data21 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"HV",0.001)$pat_data[,c("F20","F21")], mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"HV",0.001)$cl_data[,c("C4","C7")]))
+data22 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"MS",0.001)$pat_data[,c("F20","F21")], mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"MS",0.001)$cl_data[,c("C4","C7")]))
 
 PerformanceAnalytics::chart.Correlation(data21, histogram=TRUE, pch=19, method = "spearman")
 
@@ -681,7 +682,7 @@ Here we will select only a number of clinical features using high correlation te
 ## First we remove features that are 0 in the healthy cohorts and also features that are highly correlated
 
 ## Healthy Cohorst
-cl_feat_signHV2 <- cl_feat_signHV %>% dplyr::select(-c(C15, C16, C26, C27, C28))
+cl_feat_signHV2 <- cl_feat_signHV #%>% dplyr::select(-c(C15, C16, C26, C27, C28))
 res_cl.HV.S2 <- rcorr(as.matrix(cl_feat_signHV2), type = cor_type)
 
 cl_feat_signHV2 <- cl_feat_signHV2 %>%
@@ -713,15 +714,15 @@ corrplot(res_cl.MS.S2$r, type="upper", order="original", col = col,
 
 ## rcorr(as.matrix(full_feat_train_Sdoml1 %>% dplyr::select(wtest_func_onedl(full_feat_train_Sdoml1, 0.001, "diagnosis_group","F"))))$r
 
-MSdoml1 <- subset(full_feature_train, dominant_hand_use=="YES" & diagnosis_group=="MS" & difficulty_level==1)
-MSdoml1p <- tidyr::gather(MSdoml1[,-c(1:11)], Feature, Value, F1:F40, factor_key = TRUE)
-
-
-ggplot(MSdoml1p, aes(x=Value)) + geom_histogram() + facet_wrap(~Feature, scales = "free")
-
-
-sub1_MSdoml1 <- dplyr::filter(MSdoml1, F5<0)
-sub2_MSdoml1 <- dplyr::filter(MSdoml1, F5>0)
+# MSdoml1 <- subset(full_feature_train, dominant_hand_use=="YES" & diagnosis_group=="MS" & difficulty_level==1)
+# MSdoml1p <- tidyr::gather(MSdoml1[,-c(1:11)], Feature, Value, F1:F40, factor_key = TRUE)
+# 
+# 
+# ggplot(MSdoml1p, aes(x=Value)) + geom_histogram() + facet_wrap(~Feature, scales = "free")
+# 
+# 
+# sub1_MSdoml1 <- dplyr::filter(MSdoml1, F5<0)
+# sub2_MSdoml1 <- dplyr::filter(MSdoml1, F5>0)
 
 ```
 

@@ -9,6 +9,7 @@ Here we perform different model evaluation by checking how good these models can
 ## And then the following from clinical features
 ## y_trainHV, y_trainMS, y_testHV, y_testMS
 all_cl_test <- cl_test2 %>% 
+  dplyr::mutate(testdate = as.Date(testdate)) %>% 
   dplyr::select(patient_id, testdate, neuro_testdate, apptest_to_neurotest, gender, 
                 diagnosis, diagnosis_group, dominant_hand, age, X9HPT.Avg, BMI, everything(),-id)
 colnames(all_cl_test)[10:41] <- paste("C",1:32, sep ="")
@@ -23,8 +24,8 @@ all_cl_data <- cl_feature.HV.MS %>% dplyr::mutate(testdate = as.Date(testdate, f
 
 
 #### Patient derived features
-all_full_train <- full_feature_train
-all_full_test <- full_feature_test
+all_full_train <- full_feature_train %>% dplyr::mutate(testdate = as.Date(testdate))
+all_full_test <- full_feature_test %>% dplyr::mutate(testdate = as.Date(testdate))
 
 ## Construct a function that will output training and test set given difficulty level, and dominance
 
@@ -36,17 +37,17 @@ data_func <- function(pat_data, cl_data, difficulty, alpha, dominant, diagnosis)
   
   ## Obtain features that are not stable previously calculated in Chapter5
   if((difficulty==1) & (dominant=="YES")){
-    non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml1,0.75)$HV)
+    non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml1,0.5)$HV)
   } else if((difficulty==1) & (dominant=="NO")){
-    non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml1,0.75)$HV)
+    non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml1,0.5)$HV)
   } else if((difficulty==2) & (dominant=="YES")) {
-    non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml2,0.75)$HV)
+    non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml2,0.5)$HV)
   } else if((difficulty==2) & (dominant=="NO")){
-     non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml2,0.75)$HV)
+     non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml2,0.5)$HV)
   } else if ((difficulty==3) & (dominant=="YES")){
-     non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml3,0.75)$HV)
+     non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.doml3,0.5)$HV)
   } else {
-     non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml3,0.75)$HV)
+     non_stable_Feat <- setdiff(paste("F",1:40,sep =""), ICCven_func(icc.HV.MS.ndoml3,0.5)$HV)
   }
   
   #### Extract the stable and significant feature from drawing derived features
@@ -98,6 +99,23 @@ Description on how to perform Lasso with Cross-validation is display in [documen
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
+## Function to detect and remove outlier from a given trial
+outlier_func2 <- function(dataframe){
+  ## dataframe is a data frame to remove outlier for and it contains x and y variable
+  outlier_index <- tsoutliers(dataframe$x, lambda = "auto")$index
+
+  if (length(outlier_index) == 0){
+    new_data <- dataframe 
+  } else {
+    new_data <- dataframe[-outlier_index,]
+  }
+  # df <- dataframe
+  # new_data <- df[df$x > quantile(df$x, .25) - 1.5*IQR(df$x) & 
+  #                  df$x < quantile(df$x, .75) + 1.5*IQR(df$x), ] 
+  return(new_data)
+}
+
+
 #### Lasso Regression
 
 #### Construct a function to do a reapeated Kfold CV with Lasso
@@ -109,22 +127,29 @@ rcv_lasso_func <- function(X,y, k, r){
   ## k is the number of kfold to conduct
   ## r is the repetiton 
   
+  ##set seed
+  set.seed(123)
+  
   ## Calculate the correlation coefficient between clinical and features
   Cor_df <- data.frame(Feature = character(),Rps=double(),Pps=double(),Rsp=double(),Psp=double())
   
   nX <- dim(X)[2]
   
   for (j in 1:nX){
-    Cor_df[j,"Rps"] <- cor.test(as.numeric(X[,j]),as.numeric(y), method = "pearson")$estimate
-    Cor_df[j,"Pps"] <- cor.test(as.numeric(X[,j]),as.numeric(y), method = "pearson")$p.value
-    Cor_df[j,"Rsp"] <- cor.test(as.numeric(X[,j]),as.numeric(y), method = "spearman", exact = FALSE)$estimate
-    Cor_df[j,"Psp"] <- cor.test(as.numeric(X[,j]),as.numeric(y), method = "spearman", exact = FALSE)$p.value
+    df_xy <- data.frame(x=as.numeric(X[,j]),y=as.numeric(y))
+    colnames(df_xy) <- c("x","y")
+    ## remove outliers
+    df_xy <- outlier_func2(df_xy)
+    
+    Cor_df[j,"Rps"] <- cor.test(df_xy$x,df_xy$y, method = "pearson")$estimate
+    Cor_df[j,"Pps"] <- cor.test(df_xy$x,df_xy$y, method = "pearson")$p.value
+    Cor_df[j,"Rsp"] <- cor.test(df_xy$x,df_xy$y, method = "spearman", exact = FALSE)$estimate
+    Cor_df[j,"Psp"] <- cor.test(df_xy$x,df_xy$y, method = "spearman", exact = FALSE)$p.value
   }
   
   Cor_df$Feature <- colnames(X)
   
   ## Dtermine relevent feature by lasso Cross-Validation
-
   MSEs <- NULL
   SDs <- NULL
   Coeffs <- NULL
@@ -161,23 +186,28 @@ rcv_lasso_func <- function(X,y, k, r){
 ####Extract the data for Lasso CV
 ## Difficulty Level 1
 ## Dominant HV and MS Cohorts
-x_train.domHV.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")$X_mat)
-y_train.domHV.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","HV")$y_mat)
 x_train.domMS.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","MS")$X_mat)
 y_train.domMS.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"YES","MS")$y_mat)
 ## Non-dominant HV and MS Cohorts
-x_train.ndomHV.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"NO","HV")$X_mat)
-y_train.ndomHV.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"NO","HV")$y_mat)
 x_train.ndomMS.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"NO","MS")$X_mat)
 y_train.ndomMS.l1 <- as.matrix(data_func(all_full_train, all_cl_data, 1, 0.001,"NO","MS")$y_mat)
 
+## Difficulty Level 2
+## Dominant HV and MS Cohorts
+x_train.domMS.l2 <- as.matrix(data_func(all_full_train, all_cl_data, 2, 0.001,"YES","MS")$X_mat)
+y_train.domMS.l2 <- as.matrix(data_func(all_full_train, all_cl_data, 2, 0.001,"YES","MS")$y_mat)
+## Non-dominant HV and MS Cohorts
+x_train.ndomMS.l2 <- as.matrix(data_func(all_full_train, all_cl_data, 2, 0.001,"NO","MS")$X_mat)
+y_train.ndomMS.l2 <- as.matrix(data_func(all_full_train, all_cl_data, 2, 0.001,"NO","MS")$y_mat)
+
+
 
 #### View the data with relevent features
-View(rcv_lasso_func(x_train.domHV.l1,y_train.domHV.l1[,1], 5, 20)$Coeffs)
-View(rcv_lasso_func(x_train.domHV.l1,y_train.domHV.l1[,1], 5, 20)$Cor)
+View(rcv_lasso_func(x_train.domMS.l2,y_train.domMS.l2[,2], 5, 20)$Coeffs)
+View(rcv_lasso_func(x_train.domMS.l2,y_train.domMS.l2[,2], 5, 20)$Cor)
 
-View(rcv_lasso_func(x_train.ndomHV.l1,y_train.ndomHV.l1[,1], 5, 20)$Coeffs)
-View(rcv_lasso_func(x_train.ndomHV.l1,y_train.ndomHV.l1[,1], 5, 20)$Cor)
+View(rcv_lasso_func(x_train.ndomMS.l2,y_train.ndomMS.l2[,2], 5, 20)$Coeffs)
+View(rcv_lasso_func(x_train.ndomMS.l2,y_train.ndomMS.l2[,2], 5, 20)$Cor)
 
 
 grid = 10^seq(12, -2, length = 200)
