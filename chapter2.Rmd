@@ -140,8 +140,9 @@ spiral_data_func <- function(data, patientID, ntest){
   p11_sub <- p11 %>% 
     group_by(difficulty_level) %>% 
     dplyr::filter(trial_id==levels(factor(trial_id))[1]) %>% 
-    dplyr::select(patient_id, testdate, difficulty_level, trial_id, ntest_date,time, 
-                  x, y, x_scf, y_scf, x_scc, y_scc, v_i, rv_i, av_i, appendage)
+    dplyr::select(patient_id, testdate, difficulty_level, trial_id, ntest_date,time,
+                  x, y, v_i, rv_i, av_i, appendage)
+                  #x, y, x_scf, y_scf, x_scc, y_scc, v_i, rv_i, av_i, appendage)
   
   ## generate spiral with difficulty 1, 2, and 3
   dl1 <- "Difficulty Level 1"

@@ -69,6 +69,7 @@ clean.full_data2 <- clean.full_data2 %>%
 
 
 
+
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
 
@@ -78,7 +79,11 @@ clean.full_data2 <- clean.full_data2 %>%
 # proc.time() - ptm
 
 full_data.vel <- read.csv("full_data.velocity.csv", header = TRUE) 
-  
+
+## Take magnitude of radial and angular velocity
+full_data.vel$rv_i <- abs(full_data.vel$rv_i)
+full_data.vel$av_i <- abs(full_data.vel$av_i)
+
 ## Calculate the summary statistics of velocities
 ## calculate the sum, coefiicient of variation, skew for v, rv, and av
 full_data.sum <- full_data.vel %>% 
@@ -190,11 +195,25 @@ colnames(full_feature)[12:51] <- new_full.feature.name
 handedness_data <- read.csv("Handedness.csv")
 handedness_PATIENT <- handedness_data[grep("PATIENT", handedness_data$PatientCode),]
 
+handedness_PATIENT <- handedness_PATIENT %>% 
+  dplyr::select(PatientCode, Age, Gender) %>% 
+  dplyr::rename(patient_id = "PatientCode", age="Age", gender="Gender") %>% 
+  dplyr::mutate(dominant_hand ="RH") 
+
 
 ####### select only the HV and MS features
 full_feature2 <- subset(full_feature, diagnosis_group %in% c("HV","MS"))
-## add dominant hand to Healthy patient with name "PatientNN"
-full_feature2[grep("PATIENT",full_feature2$patient_id), "dominant_hand"] <- "RH"
+## add dominant hand, age, gender to Healthy patient with name "PatientNN"
+full_feature2 <- full_feature %>% 
+  subset(diagnosis_group %in% c("HV","MS")) %>% 
+  dplyr::left_join(handedness_PATIENT, by = "patient_id") %>% 
+  dplyr::mutate(age = coalesce(age.x,age.y),gender = coalesce(gender.x,gender.y),
+                dominant_hand=coalesce(dominant_hand.x, dominant_hand.y)) %>% 
+  dplyr::select(-c(age.x,age.y,gender.x,gender.y,dominant_hand.x,dominant_hand.y)) %>% 
+  dplyr::select(patient_id, ntest_date, difficulty_level, trial_id, testdate,
+                diagnosis_group, age, gender, appendage,dominant_hand, 
+                dominant_hand_use, everything())
+#full_feature2[grep("PATIENT",full_feature2$patient_id), "dominant_hand"] <- "RH"
 full_feature2[, "dominant_hand_use"] <- 
   ifelse(full_feature2$appendage==full_feature2$dominant_hand, "YES", "NO")
 
@@ -229,6 +248,51 @@ longi_data.av <- longi_data %>%
   
 ```
 
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Obtain demographic information of entire dataset
+
+# Select difficulty level 1 and only MS and HV patients
+full_data.stat_l1 <- full_feature2 %>% dplyr::filter(difficulty_level=="1")
+
+## Find age attributes by HV and MS
+age.stat <- full_data.stat_l1 %>% 
+  group_by(diagnosis_group) %>% dplyr::select(age) %>% 
+  summarise_each(funs(mean=mean(., na.rm = TRUE), 
+                      sd=sd(., na.rm = TRUE), 
+                      median = median(., na.rm = TRUE),
+                      min = min(., na.rm = TRUE),
+                      max = max(., na.rm = TRUE)))
+  
+
+## Total number of patient, number of dominant hands, and number of male\female by HV and MS
+total_patient <- full_data.stat_l1 %>% 
+  dplyr::select(diagnosis_group, patient_id, gender, dominant_hand, age) %>% 
+  distinct(patient_id, .keep_all = TRUE) %>% 
+  group_by(diagnosis_group) %>%
+  dplyr::summarise(patient = n())
+
+total_gender <- full_data.stat_l1 %>% 
+  dplyr::select(diagnosis_group, patient_id, gender, dominant_hand, age) %>% 
+  distinct(patient_id, .keep_all = TRUE) %>% 
+  group_by(diagnosis_group,gender) %>%
+  tally()
+
+total_handedness <- full_data.stat_l1 %>% 
+  dplyr::select(diagnosis_group, patient_id, gender, dominant_hand, age) %>% 
+  distinct(patient_id, .keep_all = TRUE) %>% 
+  group_by(diagnosis_group,dominant_hand) %>%
+  tally()
+    
+
+## Obtain total number of granular and regular patient
+total_granular_patient <- length(levels(factor(longi_data$patient_id)))
+total_ngranular_patient <- (total_patient$patient[1]+total_patient$patient[2]) - total_granular_patient
+
+
+
+```
 
 ## Calculate the interclass correlation Coefficient (ICC)
 
@@ -579,6 +643,7 @@ mat.feat_func.onel <- function(pat_data,cl_data, diagnosis, alpha){
   pat_data$testdate <- as.Date(pat_data$testdate) 
   ## return all rowss from pat_data where there are matching in cl_data and columns from both
   merge_data <- dplyr::left_join(pat_data, cl_data, by =c("patient_id","testdate","diagnosis_group"))
+  #merge_data <- dplyr::semi_join(merge_data, cl_data, by =c("patient_id","testdate","diagnosis_group"))
   
   cl_sub <- merge_data %>% ungroup() %>%  
     dplyr::select(diagnosis_group, wtest_func_onedl(cl_data, alpha, "diagnosis_group", "C")) %>% 
@@ -653,6 +718,29 @@ data21 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml2,cl_featur
 data22 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"MS",0.001)$pat_data[,c("F20","F21")], mat.feat_func.onel(full_feat_train_Sdoml2,cl_feature.HV.MS,"MS",0.001)$cl_data[,c("C4","C7")]))
 
 PerformanceAnalytics::chart.Correlation(data21, histogram=TRUE, pch=19, method = "spearman")
+
+
+#### Check data 
+pat <- full_feat_train_Sdoml1
+pat$testdate <- as.Date(pat$testdate)
+cl <- cl_feature.HV.MS
+cl$testdate <- as.Date(cl$testdate,format = "%m/%d/%Y")
+
+m_data <- dplyr::left_join(pat,cl,by =c("patient_id","testdate","diagnosis_group"))
+
+cl_s <-  m_data %>% ungroup() %>% 
+  dplyr::select(patient_id, ntest_date, difficulty_level, trial_id, diagnosis_group, wtest_func_onedl(cl, 0.001, "diagnosis_group", "C")) 
+
+pat_s <- m_data %>%  ungroup() %>% 
+  dplyr::select(patient_id, ntest_date, difficulty_level, trial_id, diagnosis_group, intersect(names(dplyr::select(m_data %>% ungroup(),starts_with("F"))), wtest_func_onedl(pat, 0.001, "diagnosis_group", "F")))
+
+
+m_data_s <- dplyr::filter(m_data, difficulty_level=="1" & dominant_hand_use =="YES" & diagnosis_group=="MS")
+
+
+plot1 <- ggplot(data=m_data_s, aes(label = patient_id, label2 = ntest_date, label3 = difficulty_level, label4=trial_id)) + geom_point(aes(x=F29, y = F38), size = 2, color = "black")  +theme_bw()
+
+plotly::ggplotly(plot1)
 
 ###### Correlation plot of the significant clinical features
 ## Healthy Cohorts
