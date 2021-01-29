@@ -81,6 +81,7 @@ clean.full_data2 <- clean.full_data2 %>%
 full_data.vel <- read.csv("full_data.velocity.csv", header = TRUE) 
 
 ## Take magnitude of radial and angular velocity
+full_data.vel$v_i <- abs(full_data.vel$v_i)
 full_data.vel$rv_i <- abs(full_data.vel$rv_i)
 full_data.vel$av_i <- abs(full_data.vel$av_i)
 
@@ -90,10 +91,10 @@ full_data.sum <- full_data.vel %>%
   dplyr::group_by(patient_id,ntest_date,difficulty_level, trial_id) %>% 
   dplyr::summarise(v_sum = sum(v_i, na.rm = TRUE), v_cv = cv(v_i), 
             v_sk = skewness(v_i, na.rm = TRUE), v_kt = kurtosis(v_i, na.rm = TRUE), 
-            rv_sum = sum(abs(rv_i), na.rm = TRUE), rv_cv = cv(abs(rv_i)), 
-            rv_sk = skewness(abs(rv_i), na.rm = TRUE), rv_kt = kurtosis(abs(rv_i), na.rm = TRUE),
-            av_sum = sum(abs(av_i), na.rm = TRUE), av_cv = cv(abs(av_i)), 
-            av_sk = skewness(abs(av_i), na.rm = TRUE), av_kt = kurtosis(abs(av_i), na.rm = TRUE),
+            rv_sum = sum(rv_i, na.rm = TRUE), rv_cv = cv(rv_i), 
+            rv_sk = skewness(rv_i, na.rm = TRUE), rv_kt = kurtosis(rv_i, na.rm = TRUE),
+            av_sum = sum(av_i, na.rm = TRUE), av_cv = cv(av_i), 
+            av_sk = skewness(av_i, na.rm = TRUE), av_kt = kurtosis(av_i, na.rm = TRUE),
             pressure_sum = sum(p, na.rm = TRUE))
 
 #### Power Spectral Density using Welsh periodogram with a Hamming window
@@ -114,17 +115,21 @@ full_data.psd <- full_data.vel %>%
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
-#### calculate data frame with hausdorff distance metrics
-# ptm <- proc.time() ## Take 4.077 hours
+### calculate data frame with hausdorff distance metrics
+# ptm <- proc.time() ## Take 4.02 hours
 # full_data.hausD <- HausData_func(full_data.vel, "x", "y")
 # proc.time() - ptm
+# 
+# write.csv(full_data.hausD, file = "full_dataHausD.csv")
 
 full_data.hausD <- read.csv("full_dataHausD.csv")
 
-#### calculate data frame with Area Under the curve
-# ptm <- proc.time() ## Take 13 min
+# ### calculate data frame with Area Under the curve
+# ptm <- proc.time() ## Take 5.6 min
 # full_data.Error <- Error_func(full_data.vel, "x", "y")
 # proc.time() - ptm
+# 
+# write.csv(full_data.Error, file = "full_dataError.csv")
 
 full_data.Error <- read.csv("full_dataError.csv")
 
@@ -201,11 +206,9 @@ handedness_PATIENT <- handedness_PATIENT %>%
   dplyr::mutate(dominant_hand ="RH") 
 
 
-####### select only the HV and MS features
-full_feature2 <- subset(full_feature, diagnosis_group %in% c("HV","MS"))
-## add dominant hand, age, gender to Healthy patient with name "PatientNN"
+############# add dominant hand, age, gender to Healthy patient with name "PatientNN"
 full_feature2 <- full_feature %>% 
-  subset(diagnosis_group %in% c("HV","MS")) %>% 
+  subset(diagnosis_group %in% c("HV","MS")) %>% # select only the HV and MS features
   dplyr::left_join(handedness_PATIENT, by = "patient_id") %>% 
   dplyr::mutate(age = coalesce(age.x,age.y),gender = coalesce(gender.x,gender.y),
                 dominant_hand=coalesce(dominant_hand.x, dominant_hand.y)) %>% 
@@ -391,6 +394,75 @@ icc.HV.MS.ndoml3 <- rbind(data.frame(icc.HV.ndoml3,Diagnosis = "HV"),
 ```
 
 
+Now we construct a function to calculate the p-value between the HV and MS
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+
+### Create a function to calculate the wilcoxon test to determine significance between HV and MS
+HV.v.MS_func <- function(data, dominant, difficulty, group_var, Feat_ac){
+  ## data is dataframe containing all the features with attributes columns (diagnosis_group etc.)
+  # dominant is either YES or NO for dominant hand and difficulty is level 1 ,2, or 3
+  ## group_var is the grouping variable
+  ## Feat_ac is the feature acronym either F or C
+  
+  sub_data <- data %>% 
+    subset((dominant_hand_use==dominant) & (difficulty_level==difficulty)) %>% 
+    ungroup() %>% 
+    dplyr::select(group_var, grep(Feat_ac,names(data), value = TRUE))
+  
+ 
+  f_numb <- dim(sub_data)[2] ## get the size of the data
+  col_names <- colnames(sub_data)[2:f_numb]
+  Group <- sub_data[,group_var]
+  
+  pval_table <- data.frame(Feature = paste(rep("F",40),1:40,sep = ""), pval = rep(0, 40), 
+                           FC = rep(0, 40))
+  count  = 0
+  
+  ## Loop through each features
+  for (j in col_names){
+    count = count + 1
+    fi_data <- data.frame(Group = Group, Feature = sub_data[,j])
+    colnames(fi_data) <- c("Group","Feature")
+    res <- wilcox.test(Feature ~ Group, data = fi_data, exact = FALSE)
+    pval <- res$p.value ## pvalue
+    pval_table[count,"pval"] <- pval
+    
+    ## calculate fold change
+    fold_change <- mean(gtools::foldchange(subset(fi_data, Group==levels(Group)[1])$Feature,
+                                      subset(fi_data, Group==levels(Group)[2])$Feature))
+      
+    pval_table[count,"FC"] <- fold_change
+    
+  }
+  return(pval_table)
+}
+
+## Compute pvalues by HV vs. MS
+pval.doml1 <- HV.v.MS_func(full_feature_train, "YES", "1","diagnosis_group","F")
+pval.doml2 <- HV.v.MS_func(full_feature_train, "YES", "2","diagnosis_group","F")
+pval.doml3 <- HV.v.MS_func(full_feature_train, "YES", "3","diagnosis_group","F")
+
+pval.ndoml1 <- HV.v.MS_func(full_feature_train, "NO", "1","diagnosis_group","F")
+pval.ndoml2 <- HV.v.MS_func(full_feature_train, "NO", "2","diagnosis_group","F")
+pval.ndoml3 <- HV.v.MS_func(full_feature_train, "NO", "3","diagnosis_group","F")
+
+#### Combine P-value and ICC of healthy volunteers data frame
+icc.pval.doml1 <- merge(icc.HV.doml1, pval.doml1, by = "Feature")
+icc.pval.doml2 <- merge(icc.HV.doml2, pval.doml2, by = "Feature")
+icc.pval.doml3 <- merge(icc.HV.doml3, pval.doml3, by = "Feature")
+
+icc.pval.ndoml1 <- merge(icc.HV.ndoml1, pval.ndoml1, by = "Feature")
+icc.pval.ndoml2 <- merge(icc.HV.ndoml2, pval.ndoml2, by = "Feature")
+icc.pval.ndoml3 <- merge(icc.HV.ndoml3, pval.ndoml3, by = "Feature")
+
+```
+
+
+
+
+
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
 
@@ -405,6 +477,8 @@ Nice.Label2 <-theme(axis.text.x = element_text(face="bold", color="black", size=
 ##################
 
 
+
+######################################## PLOTTING ICC
 #### Difficulty level 1
 ## dominant hand Difficulty level 1 
 ggplot(icc.HV.MS.doml1, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
@@ -450,6 +524,14 @@ ggplot(icc.HV.MS.ndoml3, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fil
   scale_fill_manual(values = c("slategray2","steelblue")) +
   theme_bw() + theme(legend.position = "bottom") + Nice.Label2
 
+
+##################### PLOTTING ICC vs. Pvalue
+
+ggplot(icc.pval.doml1, aes(x=FC, y=ICC, label = Label)) +
+  geom_point(alpha=0.7, size = 8, color = "darkgray") +
+  geom_text() +
+  #scale_x_continuous(trans='log2') +
+  theme_bw() + Nice.Label2
 ```
 
 
@@ -527,7 +609,7 @@ wtest_func_onedl <- function(data, alpha, group_var, Feat_ac){
       }
     }
     if (Feat_ac=="F" & is.null(sign_features)){
-    sign_features <- c("F5","F6","F11")
+    sign_features <- c("F38","F32","F33")
     } else {
     sign_features <- sign_features
     }
@@ -670,7 +752,7 @@ mat.feat_func.onel <- function(pat_data,cl_data, diagnosis, alpha){
   p_pat_cl <- cor_mat$P[(n_cl+1):n,1:n_cl]
   n_pat_cl <- cor_mat$n[(n_cl+1):n,1:n_cl]
   #  ## plot
-  corrplot(r_pat_cl, type="full", order="original", col = col,
+  corrplot(r_pat_cl, type="full", order="original", col = col_cor,
          p.mat = p_pat_cl, sig.level = 0.05, insig = "blank", diag = TRUE,
          tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
   return(list(cl_data =cl_sub, pat_data=pat_sub, r=r_pat_cl, P=p_pat_cl, n=n_pat_cl))

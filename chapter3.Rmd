@@ -3,7 +3,7 @@
 ## Hausdorff Distance (dH(X,Y))
 We computed drawing error based on a shape-matching approach known as the Hausdorff distance.First, let $X$ and $Y$ be two-non empty subsets of a metric space $(M, d)$ where $M$ is set and $d$ is a metric or distance on $M$. The formula of the Hausdorff distance $d_H(X,Y)$ is as follow:
 $$d_H(X,Y) = \max\{\sup_{x\in X} \inf_{y\in Y} d(x,y), \sup_{y\in Y}\inf_{x\in X} d(x,y)\}$$
-From Creagh et al., 2020, it was stated that ``This metric compares the maximum distance of one set to the nearest point in another set, which can be used as a basis to compute the error between the reference way-points (interpolated into a reference shape scaled to the number of pixels drawn) and the subject’s drawing attempt". Thus wqe took similar approach by first interpolating the reference points to the size of the drawing attempt prior to calculating the $d_H(X,Y)$.
+From Creagh et al., 2020, it was stated that ``This metric compares the maximum distance of one set to the nearest point in another set, which can be used as a basis to compute the error between the reference way-points (interpolated into a reference shape scaled to the number of pixels drawn) and the subject’s drawing attempt". Thus we took similar approach by first interpolating the reference points to the size of the drawing attempt prior to calculating the $d_H(X,Y)$.
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
@@ -231,7 +231,8 @@ where $|.|$ is the abosulte value of the difference between the two Area Under t
 
 The Mean-Squared Error (MSE) between two images $f_{ref}(x,y)$ (reference image) and $f_{pat}(x,y)$ can be described as follow from [website](http://homepages.inf.ed.ac.uk/rbf/CVonline/LOCAL_COPIES/VELDHUIZEN/node18.html) and [Asamoah et al., 2018](https://www.ijcaonline.org/archives/volume181/number22/asamoah-2018-ijca-917899.pdf):
 
-$$MSE = \frac{1}{M\times N}\sum_{n=1}^{M}\sum_{m=1}^{N}\left[f_{ref}(x,y) - f_{pat}(x,y)\right]^2$$ 
+$$MSE = \frac{1}{M\times N}\sum_{n=1}^{M}\sum_{m=1}^{N}\left[f_{ref}(x,y) - f_{pat}(x,y)\right]^2$$
+
 
 where $M$ and $N$ are the width and height of the images. In our case, we are in 2-D and thus $N=2$ while $M$ varies according to the trial level. We first use Spline interpolation to get the reference image to the same length as the patient drawing. 
 

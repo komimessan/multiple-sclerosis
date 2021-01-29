@@ -173,7 +173,7 @@ spiral_data_func <- function(data, patientID, ntest){
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
 ## Compute the spiral according to the appendage and extract data for plotting
-spiral_data <- spiral_data_func(ms_data4, "NDS691","1")
+spiral_data <- spiral_data_func(ms_data4, "NDS670","1") #NDS691, "1"
 patient_spiral <- as.data.frame(spiral_data$patient_spiral)
 true_spiral <- as.data.frame(spiral_data$true_spiral)
 linewidth <- spiral_data$true_spiral$linewidth

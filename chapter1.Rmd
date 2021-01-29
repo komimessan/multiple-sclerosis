@@ -112,9 +112,9 @@ ms_data2$t <- ms_data2$t/1000 ## convert time point from milliseconds to seconds
 ## add time that is scaled from 0 by patient_id, ntest_date, and difficulty_level and remove duplicate x, y, t
 ms_data2 <- ms_data2 %>% 
   group_by(patient_id, ntest_date, difficulty_level, trial_id) %>% 
-  distinct(x,y,t,p, .keep_all = TRUE) %>% 
-  arrange(t) %>% 
-  mutate(pixel = row_number(), time = t-t[1])
+  dplyr::distinct(x,y,t,p, .keep_all = TRUE) %>% 
+  dplyr::arrange(t) %>% 
+  dplyr::mutate(pixel = row_number(), time = t-t[1])
 
 ```
 
