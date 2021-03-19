@@ -211,7 +211,8 @@ full_feature2 <- full_feature %>%
   subset(diagnosis_group %in% c("HV","MS")) %>% # select only the HV and MS features
   dplyr::left_join(handedness_PATIENT, by = "patient_id") %>% 
   dplyr::mutate(age = coalesce(age.x,age.y),gender = coalesce(gender.x,gender.y),
-                dominant_hand=coalesce(dominant_hand.x, dominant_hand.y)) %>% 
+                dominant_hand=coalesce(dominant_hand.x, dominant_hand.y),
+                testdate = as.Date(testdate)) %>% 
   dplyr::select(-c(age.x,age.y,gender.x,gender.y,dominant_hand.x,dominant_hand.y)) %>% 
   dplyr::select(patient_id, ntest_date, difficulty_level, trial_id, testdate,
                 diagnosis_group, age, gender, appendage,dominant_hand, 
@@ -229,26 +230,10 @@ full_feature_test <- full_feature2 %>%
     dplyr::filter((patient_id %in% cl_test2$patient_id) & (testdate %in% cl_test2$testdate)) 
 
 full_feature_train <- anti_join(full_feature2, full_feature_test, by = c("patient_id","testdate"))
-```
 
+## add Healthy Volunteers to test sets
+full_feature_test2 <- rbind(full_feature_test, subset(full_feature_train, diagnosis_group=="HV"))
 
-## Extraction of longitudinal data
-
-```{r  message=FALSE, warning=FALSE, include=FALSE}
-## Extract HV and MS patients with longitudinal data
-longi_pat <- full_feature2
-longi_pat$ntest_date <- as.numeric(full_feature2$ntest_date)
-longi_pat <- unique(subset(longi_pat, ntest_date >= 6)$patient_id)
-
-longi_data <- subset(full_feature2, patient_id %in% longi_pat)
-
-### Average features by trial_id group
-longi_data.av <- longi_data %>% 
-  dplyr::select(-c(trial_id, age, gender, appendage, dominant_hand)) %>% 
-  group_by(patient_id, ntest_date, difficulty_level, diagnosis_group, dominant_hand_use) %>% 
-  dplyr::summarise_all(.funs = mean)
-  
-  
 ```
 
 
@@ -297,15 +282,38 @@ total_ngranular_patient <- (total_patient$patient[1]+total_patient$patient[2]) -
 
 ```
 
+
+
+## Extraction of longitudinal data
+To later calculated the Intraclass correlation coefficient (ICC), We extract the longitudinal data (i.e. patient that took the test more than 5 times during the two years period). The ICC was only calculated for the Healthy Volunteers since we expect more stability in features in healthy cohorts as oppose to the MS cohorts.
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+## Extract HV and MS patients with longitudinal data
+longi_pat <- full_feature_train
+longi_pat$ntest_date <- as.numeric(full_feature_train$ntest_date)
+longi_pat <- unique(subset(longi_pat, ntest_date >= 6)$patient_id)
+
+longi_data <- subset(full_feature_train, patient_id %in% longi_pat)
+
+### Average features by trial_id group
+longi_data.av <- longi_data %>% 
+  dplyr::select(-c(trial_id, age, gender, appendage, dominant_hand)) %>% 
+  group_by(patient_id, ntest_date, difficulty_level, diagnosis_group, dominant_hand_use) %>% 
+  dplyr::summarise_all(.funs = mean)
+
+  
+```
+
+
+
 ## Calculate the interclass correlation Coefficient (ICC)
 
 Given that we have test-rested (i.e. repeated measures of the same subject), it is advised in (Koo et al., 2016) to use the two-way mixed-effects model and the absolute agreement. See more detail in [here](https://www.datanovia.com/en/lessons/intraclass-correlation-coefficient-in-r/).
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
-##Extract HV and MS with  
+##Extract HV and MS   
 longi_data.HV <- subset(longi_data.av, diagnosis_group=="HV")
 longi_data.MS <- subset(longi_data.av, diagnosis_group=="MS")
-
 
 ## Extract dominant and non-dominant hands with difficulty levels
 longi_data.HV.doml1 <- subset(longi_data.HV, (dominant_hand_use=="YES") & difficulty_level==1)
@@ -315,12 +323,12 @@ longi_data.HV.ndoml1 <- subset(longi_data.HV, (dominant_hand_use=="NO") & diffic
 longi_data.HV.ndoml2 <- subset(longi_data.HV, (dominant_hand_use=="NO") & difficulty_level==2)
 longi_data.HV.ndoml3 <- subset(longi_data.HV, (dominant_hand_use=="NO") & difficulty_level==3)
 
-longi_data.MS.doml1 <- subset(longi_data.MS, dominant_hand_use=="YES" & difficulty_level==1)
-longi_data.MS.doml2 <- subset(longi_data.MS, dominant_hand_use=="YES" & difficulty_level==2)
-longi_data.MS.doml3 <- subset(longi_data.MS, dominant_hand_use=="YES" & difficulty_level==3)
-longi_data.MS.ndoml1 <- subset(longi_data.MS, dominant_hand_use=="NO" & difficulty_level==1)
-longi_data.MS.ndoml2 <- subset(longi_data.MS, dominant_hand_use=="NO" & difficulty_level==2)
-longi_data.MS.ndoml3 <- subset(longi_data.MS, dominant_hand_use=="NO" & difficulty_level==3)
+longi_data.MS.doml1 <- subset(longi_data.MS, (dominant_hand_use=="YES") & difficulty_level==1)
+longi_data.MS.doml2 <- subset(longi_data.MS, (dominant_hand_use=="YES") & difficulty_level==2)
+longi_data.MS.doml3 <- subset(longi_data.MS, (dominant_hand_use=="YES") & difficulty_level==3)
+longi_data.MS.ndoml1 <- subset(longi_data.MS, (dominant_hand_use=="NO") & difficulty_level==1)
+longi_data.MS.ndoml2 <- subset(longi_data.MS, (dominant_hand_use=="NO") & difficulty_level==2)
+longi_data.MS.ndoml3 <- subset(longi_data.MS, (dominant_hand_use=="NO") & difficulty_level==3)
 
 ### Create a function to calculate the ICC per features
 ICC_func <- function(data){
@@ -329,11 +337,13 @@ ICC_func <- function(data){
     ungroup() %>% 
     dplyr::select(-c(difficulty_level, testdate, diagnosis_group, dominant_hand_use))
   
+  nF <- length(grep("F",names(sub_data), value = TRUE)) ## number of features
+  
   ## Function to remove columns with any NA and non-numeric value
   not_any_na <- function(x) all(!is.na(x) & is.numeric(x))
   n <- dim(sub_data)[2] ## get the size of the data
-  icc_vec <- rep(0, 40)
-  label <- paste(rep("F",40),1:40,sep = "")
+  icc_vec <- rep(0, nF)
+  label <- paste(rep("F",nF),1:nF,sep = "")
   
   ## Loop through each features
   for (j in 3:n){
@@ -369,32 +379,38 @@ icc.HV.ndoml1 <- ICC_func(longi_data.HV.ndoml1)
 icc.HV.ndoml2 <- ICC_func(longi_data.HV.ndoml2)
 icc.HV.ndoml3 <- ICC_func(longi_data.HV.ndoml3)
 
+
 icc.MS.doml1 <- ICC_func(longi_data.MS.doml1)
 icc.MS.doml2 <- ICC_func(longi_data.MS.doml2)
 icc.MS.doml3 <- ICC_func(longi_data.MS.doml3)
 icc.MS.ndoml1 <- ICC_func(longi_data.MS.ndoml1)
 icc.MS.ndoml2 <- ICC_func(longi_data.MS.ndoml2)
 icc.MS.ndoml3 <- ICC_func(longi_data.MS.ndoml3)
-
 ### Combine HV and MS
-icc.HV.MS.doml1 <- rbind(data.frame(icc.HV.doml1,Diagnosis = "HV"), 
+icc.HV.MS.doml1 <- rbind(data.frame(icc.HV.doml1,Diagnosis = "HV"),
                          data.frame(icc.MS.doml1, Diagnosis = "MS"))
-icc.HV.MS.doml2 <- rbind(data.frame(icc.HV.doml2,Diagnosis = "HV"), 
+icc.HV.MS.doml2 <- rbind(data.frame(icc.HV.doml2,Diagnosis = "HV"),
                          data.frame(icc.MS.doml2, Diagnosis = "MS"))
-icc.HV.MS.doml3 <- rbind(data.frame(icc.HV.doml3,Diagnosis = "HV"), 
+icc.HV.MS.doml3 <- rbind(data.frame(icc.HV.doml3,Diagnosis = "HV"),
                          data.frame(icc.MS.doml3, Diagnosis = "MS"))
 
-icc.HV.MS.ndoml1 <- rbind(data.frame(icc.HV.ndoml1,Diagnosis = "HV"), 
+icc.HV.MS.ndoml1 <- rbind(data.frame(icc.HV.ndoml1,Diagnosis = "HV"),
                          data.frame(icc.MS.ndoml1, Diagnosis = "MS"))
-icc.HV.MS.ndoml2 <- rbind(data.frame(icc.HV.ndoml2,Diagnosis = "HV"), 
+icc.HV.MS.ndoml2 <- rbind(data.frame(icc.HV.ndoml2,Diagnosis = "HV"),
                          data.frame(icc.MS.ndoml2, Diagnosis = "MS"))
-icc.HV.MS.ndoml3 <- rbind(data.frame(icc.HV.ndoml3,Diagnosis = "HV"), 
+icc.HV.MS.ndoml3 <- rbind(data.frame(icc.HV.ndoml3,Diagnosis = "HV"),
                          data.frame(icc.MS.ndoml3, Diagnosis = "MS"))
 
 ```
 
 
-Now we construct a function to calculate the p-value between the HV and MS
+Now we construct a function to calculate the p-value between the HV and MS. To calculate the Log Fold change (Log2FC), we used the following procedure: 
+$$Log2FC = \frac{mean\{Log2(|Feature \quad in \quad HV|) + 1\}}{mean\{Log2(|Feature \quad in \quad MS|) + 1\}}$$
+where group 1 and 2 could either be HV or MS and $|.|$ is the absolute value of the features.
+
+
+Here we also calculated the wilcoxon test and also the effect size. Note that a significant p-value tells us that a treatment works, whereas an effect size tell us how much it works. According to Cohen et al., effect size of 0.1 < 0.3 is small, 0.3 < 0.5 is moderate, and >=0.5 is a large effect. See more in [Datanovia](https://www.datanovia.com/en/lessons/wilcoxon-test-in-r/#effect-size) or different ways to calculate it in [Datanovia2](https://www.datanovia.com/en/lessons/t-test-effect-size-using-cohens-d-measure/#:~:text=T%2Dtest%20conventional%20effect%20sizes,if%20it%20is%20statistically%20significant.)
+
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 
@@ -416,8 +432,9 @@ HV.v.MS_func <- function(data, dominant, difficulty, group_var, Feat_ac){
   col_names <- colnames(sub_data)[2:f_numb]
   Group <- sub_data[,group_var]
   
-  pval_table <- data.frame(Feature = paste(rep("F",40),1:40,sep = ""), pval = rep(0, 40), 
-                           FC = rep(0, 40))
+  pval_table <- data.frame(Feature = character(), pval = numeric(), effsizeR = numeric(),
+                           HCsize = numeric(), MSsize = numeric(), FC = numeric(),
+                           Log2FC = numeric(), stringsAsFactors=FALSE)
   count  = 0
   
   ## Loop through each features
@@ -427,41 +444,41 @@ HV.v.MS_func <- function(data, dominant, difficulty, group_var, Feat_ac){
     colnames(fi_data) <- c("Group","Feature")
     res <- wilcox.test(Feature ~ Group, data = fi_data, exact = FALSE)
     pval <- res$p.value ## pvalue
-    pval_table[count,"pval"] <- pval
     
-    ## calculate fold change
-    fold_change <- mean(gtools::foldchange(subset(fi_data, Group==levels(Group)[1])$Feature,
-                                      subset(fi_data, Group==levels(Group)[2])$Feature))
-      
+    pval_table[count, "Feature"] <- j
+    pval_table[count,"pval"] <- pval
+    ## calculate effect size and sample size
+    pval_table[count, "effsizeR"] <- rstatix::wilcox_effsize(Feature ~ Group, data = fi_data)$effsize
+    pval_table[count, "HCsize"] <- rstatix::wilcox_effsize(Feature ~ Group, data = fi_data)$n1
+    pval_table[count, "MSsize"] <- rstatix::wilcox_effsize(Feature ~ Group, data = fi_data)$n2
+    
+    ## calculate fold change (see fold change calculation in link below)
+    # https://www.researchgate.net/post/How_to_calculate_fold_changes_between_different_group
+    condition1 <- subset(fi_data, Group==levels(Group)[1])$Feature ## feature from group 1=HV 
+    condition2 <- subset(fi_data, Group==levels(Group)[2])$Feature ## feature from group 2=MS
+    
+    # FC
+    fold_change <- mean(abs(condition2), na.rm=TRUE)/mean(abs(condition1), na.rm=TRUE)
     pval_table[count,"FC"] <- fold_change
     
+    # Log FC
+    logfold_change <- mean(log(abs(condition2) + 1, base = 2), na.rm = TRUE) - 
+      mean(log(abs(condition1) + 1, base = 2), na.rm = TRUE) ## Log(A/B) = Log(A)-Log(B)
+    pval_table[count,"Log2FC"] <- logfold_change
+    
   }
+  pval_table$BH_pval <- p.adjust(pval_table$pval, method = "BH")
   return(pval_table)
 }
 
-## Compute pvalues by HV vs. MS
-pval.doml1 <- HV.v.MS_func(full_feature_train, "YES", "1","diagnosis_group","F")
-pval.doml2 <- HV.v.MS_func(full_feature_train, "YES", "2","diagnosis_group","F")
-pval.doml3 <- HV.v.MS_func(full_feature_train, "YES", "3","diagnosis_group","F")
 
-pval.ndoml1 <- HV.v.MS_func(full_feature_train, "NO", "1","diagnosis_group","F")
-pval.ndoml2 <- HV.v.MS_func(full_feature_train, "NO", "2","diagnosis_group","F")
-pval.ndoml3 <- HV.v.MS_func(full_feature_train, "NO", "3","diagnosis_group","F")
-
-#### Combine P-value and ICC of healthy volunteers data frame
-icc.pval.doml1 <- merge(icc.HV.doml1, pval.doml1, by = "Feature")
-icc.pval.doml2 <- merge(icc.HV.doml2, pval.doml2, by = "Feature")
-icc.pval.doml3 <- merge(icc.HV.doml3, pval.doml3, by = "Feature")
-
-icc.pval.ndoml1 <- merge(icc.HV.ndoml1, pval.ndoml1, by = "Feature")
-icc.pval.ndoml2 <- merge(icc.HV.ndoml2, pval.ndoml2, by = "Feature")
-icc.pval.ndoml3 <- merge(icc.HV.ndoml3, pval.ndoml3, by = "Feature")
 
 ```
 
 
 
 
+Below we plotted the ICC for each features
 
 
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
@@ -473,7 +490,7 @@ Nice.Label2 <-theme(axis.text.x = element_text(face="bold", color="black", size=
          axis.text.y = element_text(face="bold", color="black", size=11),
          title=black.bold.text2,axis.title = black.bold.text1, legend.position = "bottom",
          legend.box = "vertical", 
-         legend.text = element_text(size=24),strip.text.x = element_text(face="bold",size=24)) 
+         legend.text = element_text(size=24),strip.text.x = element_text(face="bold",size=24), strip.text.y = element_text(face="bold",size=24)) 
 ##################
 
 
@@ -494,44 +511,6 @@ ggplot(icc.HV.MS.ndoml1, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fil
   scale_fill_manual(values = c("slategray2","steelblue")) +
   theme_bw() + theme(legend.position = "bottom") + Nice.Label2
 
-#### Difficulty level 2
-## dominant hand Difficulty level 2 
-ggplot(icc.HV.MS.doml2, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
-    geom_bar(stat="identity", color="black", position=position_dodge()) + 
-  labs(x = "Drawing Derived Features", y = "Intraclass Correlation Coefficient") + 
-  scale_fill_manual(values = c("slategray2","steelblue")) +
-  theme_bw() + theme(legend.position = "bottom") + Nice.Label2
-
-## Non-dominant hand Difficulty level 2
-ggplot(icc.HV.MS.ndoml2, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
-    geom_bar(stat="identity", color="black", position=position_dodge()) + 
-  labs(x = "Drawing Derived Features", y = "Intraclass Correlation Coefficient") + 
-  scale_fill_manual(values = c("slategray2","steelblue")) +
-  theme_bw() + theme(legend.position = "bottom") + Nice.Label2
-
-#### Difficulty level 3
-## dominant hand Difficulty level 3 
-ggplot(icc.HV.MS.doml3, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
-    geom_bar(stat="identity", color="black", position=position_dodge()) + 
-  labs(x = "Drawing Derived Features", y = "Intraclass Correlation Coefficient") + 
-  scale_fill_manual(values = c("slategray2","steelblue")) +
-  theme_bw() + theme(legend.position = "bottom") + Nice.Label2
-
-## Non-dominant hand Difficulty level 3
-ggplot(icc.HV.MS.ndoml3, aes(x=reorder(Label,c(ICC[1:40],ICC[1:40])), y=ICC, fill=Diagnosis)) + 
-    geom_bar(stat="identity", color="black", position=position_dodge()) + 
-  labs(x = "Drawing Derived Features", y = "Intraclass Correlation Coefficient") + 
-  scale_fill_manual(values = c("slategray2","steelblue")) +
-  theme_bw() + theme(legend.position = "bottom") + Nice.Label2
-
-
-##################### PLOTTING ICC vs. Pvalue
-
-ggplot(icc.pval.doml1, aes(x=FC, y=ICC, label = Label)) +
-  geom_point(alpha=0.7, size = 8, color = "darkgray") +
-  geom_text() +
-  #scale_x_continuous(trans='log2') +
-  theme_bw() + Nice.Label2
 ```
 
 
@@ -571,7 +550,7 @@ ggpubr::ggarrange(ggVennDiagram(ICCven_func(icc.HV.MS.doml3,0.75), show.legend =
 
 ```
 
-## Statistical significance of Features that are highly stable by ICC (ICC>0.75)
+## Statistical significance Features 
 
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
@@ -598,16 +577,26 @@ wtest_func_onedl <- function(data, alpha, group_var, Feat_ac){
     
     sign_features <- c() 
     
+    pval_df <- data.frame(Feature = character(), raw_pval = numeric(),
+                          stringsAsFactors=FALSE) ## dataframe for all pval
+    count = 0
+    
     for (j in col_names){
       fi_data <- data.frame(Group = Group, Feature = sub_data[,j])
       colnames(fi_data) <- c("Group","Feature")
       res <- wilcox.test(Feature ~ Group, data = fi_data, exact = FALSE)
       pval <- res$p.value
       
-      if (pval < alpha){
-      sign_features <- c(sign_features, j)
-      }
+      count= count + 1
+      
+      pval_df[count, "Feature"] <- j
+      pval_df[count, "raw_pval"] <- pval
     }
+    
+    pval_df$BH_pval <- p.adjust(pval_df$raw_pval, method = "BH") ## Calculate adjusted p-value
+    
+    sign_features <- subset(pval_df, BH_pval < alpha)$Feature
+    
     if (Feat_ac=="F" & is.null(sign_features)){
     sign_features <- c("F38","F32","F33")
     } else {
@@ -656,20 +645,188 @@ full_feat_train_Sndoml3 <- full_feature_train %>%
   subset(difficulty_level=="3" & dominant_hand_use=="NO") %>% 
   dplyr::select(-setdiff(paste("F",1:40,sep =""), StableF_ndoml3)) 
 
+################################### All Features at different difficulty levels and dominand hand
+
+######################## Training set
+## Difficulty Level 1
+full_feat_train_doml1 <- full_feature_train %>% 
+  subset(difficulty_level=="1" & dominant_hand_use=="YES") 
+full_feat_train_ndoml1 <- full_feature_train %>% 
+  subset(difficulty_level=="1" & dominant_hand_use=="NO") 
+
+## Difficulty Level 2
+full_feat_train_doml2 <- full_feature_train %>% 
+  subset(difficulty_level=="2" & dominant_hand_use=="YES") 
+full_feat_train_ndoml2 <- full_feature_train %>% 
+  subset(difficulty_level=="2" & dominant_hand_use=="NO")
+
+## Difficulty Level 3
+full_feat_train_doml3 <- full_feature_train %>% 
+  subset(difficulty_level=="3" & dominant_hand_use=="YES") 
+full_feat_train_ndoml3 <- full_feature_train %>% 
+  subset(difficulty_level=="3" & dominant_hand_use=="NO") 
+
+######################## Test set
+## Difficulty Level 1
+full_feat_test_doml1 <- full_feature_test2 %>% 
+  subset(difficulty_level=="1" & dominant_hand_use=="YES") 
+full_feat_test_ndoml1 <- full_feature_test2 %>% 
+  subset(difficulty_level=="1" & dominant_hand_use=="NO") 
+
+## Difficulty Level 2
+full_feat_test_doml2 <- full_feature_test2 %>% 
+  subset(difficulty_level=="2" & dominant_hand_use=="YES") 
+full_feat_test_ndoml2 <- full_feature_test2 %>% 
+  subset(difficulty_level=="2" & dominant_hand_use=="NO")
+
+## Difficulty Level 3
+full_feat_test_doml3 <- full_feature_test2 %>% 
+  subset(difficulty_level=="3" & dominant_hand_use=="YES") 
+full_feat_test_ndoml3 <- full_feature_test2 %>% 
+  subset(difficulty_level=="3" & dominant_hand_use=="NO") 
+
+```
+
+ We now extract the statistically significant features and calculte the Log2 Fold-Change 
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+########################################## Training sets
 ##### Statistical Significant Features
 ## DL1
-wtest_func_onedl(full_feat_train_Sdoml1, 0.001, "diagnosis_group", "F")
-wtest_func_onedl(full_feat_train_Sndoml1, 0.001, "diagnosis_group", "F")
+full_feat_train_doml1.Sign <- full_feat_train_doml1 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_train_doml1, 0.001, "diagnosis_group", "F")))
+full_feat_train_ndoml1.Sign <- full_feat_train_ndoml1 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_train_ndoml1, 0.001, "diagnosis_group", "F")))
 
 ## DL2
-wtest_func_onedl(full_feat_train_Sdoml2, 0.001, "diagnosis_group", "F")
-wtest_func_onedl(full_feat_train_Sndoml2, 0.001, "diagnosis_group", "F")
+full_feat_train_doml2.Sign <- full_feat_train_doml2 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_train_doml2, 0.001, "diagnosis_group", "F")))
+full_feat_train_ndoml2.Sign <- full_feat_train_ndoml2 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_train_ndoml2, 0.001, "diagnosis_group", "F")))
 
 ## DL3
-wtest_func_onedl(full_feat_train_Sdoml2, 0.001, "diagnosis_group", "F")
-wtest_func_onedl(full_feat_train_Sndoml2, 0.001, "diagnosis_group", "F")
+full_feat_train_doml3.Sign <- full_feat_train_doml3 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_train_doml3, 0.001, "diagnosis_group", "F")))
+full_feat_train_ndoml3.Sign <- full_feat_train_ndoml3 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_train_ndoml3, 0.001, "diagnosis_group", "F")))
+
+###############
+## Compute Fold-Change by HV vs. MS
+fc.doml1 <- HV.v.MS_func(full_feat_train_doml1.Sign, "YES", "1","diagnosis_group","F")
+fc.doml2 <- HV.v.MS_func(full_feat_train_doml2.Sign, "YES", "2","diagnosis_group","F")
+fc.doml3 <- HV.v.MS_func(full_feat_train_doml3.Sign, "YES", "3","diagnosis_group","F")
+
+fc.ndoml1 <- HV.v.MS_func(full_feat_train_ndoml1.Sign, "NO", "1","diagnosis_group","F")
+fc.ndoml2 <- HV.v.MS_func(full_feat_train_ndoml2.Sign, "NO", "2","diagnosis_group","F")
+fc.ndoml3 <- HV.v.MS_func(full_feat_train_ndoml3.Sign, "NO", "3","diagnosis_group","F")
+
+#### Combine Fold-change and ICC of healthy volunteers data frame
+icc.fc.doml1 <- data.frame(merge(icc.HV.doml1, fc.doml1, by = "Feature"), difficulty = "Difficulty Level 1")
+icc.fc.doml2 <- data.frame(merge(icc.HV.doml2, fc.doml2, by = "Feature"), difficulty = "Difficulty Level 2")
+icc.fc.doml3 <- data.frame(merge(icc.HV.doml3, fc.doml3, by = "Feature"), difficulty = "Difficulty Level 3")
+
+icc.fc.ndoml1 <- data.frame(merge(icc.HV.ndoml1, fc.ndoml1, by = "Feature"), difficulty = "Difficulty Level 1")
+icc.fc.ndoml2 <- data.frame(merge(icc.HV.ndoml2, fc.ndoml2, by = "Feature"), difficulty = "Difficulty Level 2")
+icc.fc.ndoml3 <- data.frame(merge(icc.HV.ndoml3, fc.ndoml3, by = "Feature"), difficulty = "Difficulty Level 3")
+
+icc.fc.dom <- data.frame(rbind(icc.fc.doml1, icc.fc.doml2, icc.fc.doml3), hand = "Dominant")
+icc.fc.ndom <- data.frame(rbind(icc.fc.ndoml1, icc.fc.ndoml2, icc.fc.ndoml3), hand = "Non-dominant")
+
+icc.fc <- rbind(icc.fc.dom,icc.fc.ndom) ### Merge the entire datasets of icc vs. fold change
+
+############################################### Test sets
+
+##### Statistical Significant Features
+## DL1
+full_feat_test_doml1.Sign <- full_feat_test_doml1 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_test_doml1, 0.001, "diagnosis_group", "F")))
+full_feat_test_ndoml1.Sign <- full_feat_test_ndoml1 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_test_ndoml1, 0.001, "diagnosis_group", "F")))
+
+## DL2
+full_feat_test_doml2.Sign <- full_feat_test_doml2 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_test_doml2, 0.001, "diagnosis_group", "F")))
+full_feat_test_ndoml2.Sign <- full_feat_test_ndoml2 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_test_ndoml2, 0.001, "diagnosis_group", "F")))
+
+## DL3
+full_feat_test_doml3.Sign <- full_feat_test_doml3 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_test_doml3, 0.001, "diagnosis_group", "F")))
+full_feat_test_ndoml3.Sign <- full_feat_test_ndoml3 %>% 
+  dplyr::select(-setdiff(paste("F",1:40,sep = ""), wtest_func_onedl(full_feat_test_ndoml3, 0.001, "diagnosis_group", "F")))
+
+###############
+
+## Compute Fold-Change by HV vs. MS
+fc.doml1.tst <- HV.v.MS_func(full_feat_test_doml1.Sign, "YES", "1","diagnosis_group","F")
+fc.doml2.tst <- HV.v.MS_func(full_feat_test_doml2.Sign, "YES", "2","diagnosis_group","F")
+fc.doml3.tst <- HV.v.MS_func(full_feat_test_doml3.Sign, "YES", "3","diagnosis_group","F")
+
+fc.ndoml1.tst <- HV.v.MS_func(full_feat_test_ndoml1.Sign, "NO", "1","diagnosis_group","F")
+fc.ndoml2.tst <- HV.v.MS_func(full_feat_test_ndoml2.Sign, "NO", "2","diagnosis_group","F")
+fc.ndoml3.tst <- HV.v.MS_func(full_feat_test_ndoml3.Sign, "NO", "3","diagnosis_group","F")
+
+#### Combine Fold-change and ICC of healthy volunteers data frame
+icc.fc.doml1.tst <- data.frame(merge(icc.HV.doml1, fc.doml1.tst, by = "Feature") ,
+                               difficulty="Difficulty Level 1") 
+icc.fc.doml2.tst <- data.frame(merge(icc.HV.doml2, fc.doml2.tst, by = "Feature"),
+                               difficulty="Difficulty Level 2")
+icc.fc.doml3.tst <- data.frame(merge(icc.HV.doml3, fc.doml3.tst, by = "Feature"),
+                               difficulty="Difficulty Level 3")
+
+icc.fc.ndoml1.tst <- data.frame(merge(icc.HV.ndoml1, fc.ndoml1.tst, by = "Feature"),
+                               difficulty="Difficulty Level 1")
+icc.fc.ndoml2.tst <- data.frame(merge(icc.HV.ndoml2, fc.ndoml2.tst, by = "Feature"),
+                               difficulty="Difficulty Level 2")
+icc.fc.ndoml3.tst <- data.frame(merge(icc.HV.ndoml3, fc.ndoml3.tst, by = "Feature"),
+                               difficulty="Difficulty Level 3")
 
 
+icc.fc.dom.tst <- data.frame(rbind(icc.fc.doml1.tst, icc.fc.doml2.tst, icc.fc.doml3.tst), 
+                             hand = "Dominant")
+icc.fc.ndom.tst <- data.frame(rbind(icc.fc.ndoml1.tst, icc.fc.ndoml2.tst, 
+                                    icc.fc.ndoml3.tst), hand = "Non-dominant")
+
+icc.fc.tst <- rbind(icc.fc.dom.tst,icc.fc.ndom.tst) ### Merge the entire datasets of icc vs. fold change
+
+## Combine all
+icc.fc.all <- rbind(data.frame(icc.fc, Type = "Training Set"),data.frame(icc.fc.tst, Type = "Test Set"))
+
+```
+
+
+No we plot the ICC vs the Log2 Fold Change for significant features. Note that FC is a ratio of one value to another. One of the values is used as the reference point. In our case, we used treatment / control where the control value is used as a reference point. Fold-change of 2 means treatment is twice the value of control.
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+##################### PLOTTING ICC vs. Log2FC
+
+### Individual plot
+ggplot(icc.fc.doml1, aes(x=Log2FC, y=ICC, label = Label)) +
+  geom_point(alpha=0.7, size = 8, color = "darkgray") +
+  geom_text(size = 5) +
+  labs(x = "", y ="") +
+  #labs(x = "Average Log2 Fold Change of HV and MS", y = "Intraclass Correlation Coefficient") +
+  theme_bw() + Nice.Label2
+
+#### PLot in facet_grid
+
+ggplot(icc.fc, aes(x=FC, y=ICC, label = Label)) +
+    geom_point(alpha=0.7, size = 8, color = "darkgray") +
+    geom_text(size = 5) + xlim(0.0,2.9) + ylim(0.0,1.0)+
+    labs(x = "", y ="") +
+    facet_grid(hand~difficulty, scales = "free") +
+    theme_bw() + Nice.Label
+
+### Training and test set combined
+ggplot(icc.fc.all, aes(x=FC, y=ICC, label = Label, color=Type)) +
+  geom_point(alpha=0.6,size = 8) +
+  scale_color_manual(values = c('darkgray','green')) + 
+  geom_text(size = 5, alpha=1.2, color="black") + xlim(2,3)+ylim(0.5,1.00)+
+  labs(x = "", y ="") + 
+  facet_grid(hand~difficulty) +
+  theme_bw() + theme(legend.title=element_blank()) + Nice.Label
 ```
 
 
@@ -739,21 +896,15 @@ mat.feat_func.onel <- function(pat_data,cl_data, diagnosis, alpha){
     dplyr::filter(diagnosis_group==diagnosis) %>% 
     dplyr::select(-c(diagnosis_group))
   
-  
-  
-  ## Calculate correlation matrix and corresponding p-value
-  cor_mat <- rcorr(as.matrix(cl_sub), as.matrix(pat_sub), type = cor_type)
+    ## Calculate correlation matrix and corresponding p-value
+  cor_mat <- psych::corr.test(cl_sub,pat_sub, method = cor_type, adjust = "none") 
   ## number of clinical features and correlation matrix size
-  n_cl <- dim(cl_sub)[2]
-  n <- dim(cor_mat$r)[2]
-  # r_pat_cl <- cor_mat$r[1:18,19:n]
-  # p_pat_cl <- cor_mat$P[1:18,19:n]
-  r_pat_cl <- cor_mat$r[(n_cl+1):n,1:n_cl]
-  p_pat_cl <- cor_mat$P[(n_cl+1):n,1:n_cl]
-  n_pat_cl <- cor_mat$n[(n_cl+1):n,1:n_cl]
+  r_pat_cl <- cor_mat$r
+  p_pat_cl <- cor_mat$P
+  n_pat_cl <- cor_mat$n
   #  ## plot
   corrplot(r_pat_cl, type="full", order="original", col = col_cor,
-         p.mat = p_pat_cl, sig.level = 0.05, insig = "blank", diag = TRUE,
+         p.mat = p_pat_cl, sig.level = 0.001, insig = "blank", diag = TRUE,
          tl.col = "black", tl.cex = 1.1, font.lab=2, cl.cex = 1.2, na.label = "NA")
   return(list(cl_data =cl_sub, pat_data=pat_sub, r=r_pat_cl, P=p_pat_cl, n=n_pat_cl))
   # return(list(cl_data =cl_sub, pat_data=pat_sub))
@@ -778,6 +929,98 @@ mat.feat_func.onel(full_feat_train_Sdoml3,cl_feature.HV.MS,"HV",0.001)
 mat.feat_func.onel(full_feat_train_Sdoml3,cl_feature.HV.MS,"MS",0.001)
 mat.feat_func.onel(full_feat_train_Sndoml3,cl_feature.HV.MS,"HV",0.001)
 mat.feat_func.onel(full_feat_train_Sndoml3,cl_feature.HV.MS,"MS",0.001)
+
+
+
+##############################################
+
+## Function to extract and plot correplot between all shape drawn feature and all clinical features
+
+mat.feat_func.onel2 <- function(pat_data,cl_data, diagnosis, alpha){
+  ## pat_data is data of shape drawn feature that are stable 
+  ## and cl_data is clinical feature data
+  ## diagnosis is diagnosis group
+  ## alpha is the alpha level for significance
+ 
+  
+  cl_data$testdate <- as.Date(cl_data$testdate, format = "%m/%d/%Y")
+  pat_data$testdate <- as.Date(pat_data$testdate) 
+  ## return all rowss from pat_data where there are matching in cl_data and columns from both
+  merge_data <- dplyr::inner_join(pat_data, cl_data, by
+                                  =c("patient_id","testdate","diagnosis_group"))
+  #merge_data <- dplyr::semi_join(merge_data, cl_data, by =c("patient_id","testdate","diagnosis_group"))
+  
+  cl_sub <- merge_data %>% ungroup() %>%
+    dplyr::select(diagnosis_group, wtest_func_onedl(cl_data, 0.001, "diagnosis_group", 
+                                                    paste(c("C","MRI"), collapse = "|"))) %>% 
+    #dplyr::select(-c(C8, C9)) %>% 
+    #dplyr::select(diagnosis_group, grep("C",names(merge_data), value = TRUE)) %>% 
+    dplyr::filter(diagnosis_group==diagnosis) %>% dplyr::select(-c(diagnosis_group)) %>% 
+    dplyr::rename("9HPT Average "=C1, "9HPT Non-dominant "=C2, "9HPT Dominant "=C3, "EDSS"=C4, 
+                  "CombiWISE"=C5, "NeurEx"=C6, "EDSS Visual"=C7, "EDSS Pyramidal"=C9, 
+                  "NeurEx Pyramidal\nNon-dominant"=C10,"NeurEx Pyramidal\nDominant" =C11, 
+                  "EDSS Cerebellar"=C12, "NeurEx Cerebellar\nNon-dominant"=C13, 
+                  "NeurEx Cerebellar\nDominant"=C14, 
+                  "NeurEx proprioception\nNon-dominant"=C15, 
+                  "NeurEx proprioception\nDominant"=C16, 
+                  "Lesion Load Brainstem"=MRI4, "Lesion Load Medulla"=MRI5, 
+                  "Lesion Load Cerebellum"=MRI6)
+    # dplyr::rename("9HPT Average "=C1, "9HPT Non-dominant "=C2, "9HPT Dominant "=C3, "EDSS"=C4, 
+    #               "CombiWISE"=C5, "NeurEx"=C6, "EDSS Visual"=C7, "EDSS Pyramidal"=C9, 
+    #               "NeurEx Pyramidal Non-dominant"=C10,"NeurEx Pyramidal Dominant" =C11, 
+    #               "EDSS Cerebellar"=C12, "NeurEx Cerebellar Non-dominant"=C13, 
+    #               "NeurEx Cerebellar Dominant"=C14, 
+    #               "NeurEx Vibration and proprioception Non-dominant"=C15, 
+    #               "NeurEx Vibration and proprioception Dominant"=C16, 
+    #               "Lesion Load Brainstem"=MRI4, "Lesion Load Medulla"=MRI5, 
+    #               "Lesion Load Cerebellum"=MRI6)
+  
+  
+  pat_sub <- merge_data %>% ungroup() %>% 
+    dplyr::select(diagnosis_group, F4, F8, F12, F24) %>%
+    dplyr::filter(diagnosis_group==diagnosis) %>% dplyr::select(-c(diagnosis_group)) %>% 
+    dplyr::rename('Kurtosis of Velocity'="F4",'Kurtosis of Radial\nVelocity'="F8",
+                  'Kurtosis of Angular\nVelocity'="F12", 'Sum of Hausdorff\nDistance'="F24" )
+  
+    ## Calculate correlation matrix and corresponding p-value
+  cor_mat <- psych::corr.test(pat_sub, cl_sub, method = cor_type, adjust = "BH") 
+  #cor_mat <- psych::corr.test(cl_sub,pat_sub, method = cor_type, adjust = "none") 
+  ## number of clinical features and correlation matrix size
+  r_pat_cl <- cor_mat$r
+  p_pat_cl <- cor_mat$p
+  n_pat_cl <- cor_mat$n
+  #  ## plot
+  colcor<- colorRampPalette(c("red", "white", "blue"))(200) #colorRampPalette(c("red","blue"))(2)
+  
+  corrplot(r_pat_cl, method = "color", type="full", order="original", col = colcor, p.mat = p_pat_cl,
+         sig.level = alpha, insig = "blank", diag = TRUE, tl.col = "black", tl.cex = 0.9,
+         font.lab=1, addCoef.col = "black", number.cex = 0.75, cl.cex = 1.0, 
+         na.label = "NA", cl.pos = "r", tl.srt = 90, addgrid.col = "darkgray", number.digits = 2)
+  return(list(cl_data =cl_sub, pat_data=pat_sub, r=r_pat_cl, P=p_pat_cl, n=n_pat_cl))
+  # return(list(cl_data =cl_sub, pat_data=pat_sub))
+} 
+
+#### Correlation plots
+## Training set
+## Difficulty Level 1
+mat.feat_func.onel2(full_feat_train_doml1,cl_feature.HV.MS,"HV",0.05)
+mat.feat_func.onel2(full_feat_train_doml1,cl_feature.HV.MS,"MS",0.05)
+mat.feat_func.onel2(full_feat_train_ndoml1,cl_feature.HV.MS,"HV",0.05)
+mat.feat_func.onel2(full_feat_train_ndoml1,cl_feature.HV.MS,"MS",0.05)
+
+## Test set (HV are the same as in Traning)
+## Difficulty Level 1
+mat.feat_func.onel2(full_feat_test_doml1,cl_feature.HV.MS,"MS",0.05)
+mat.feat_func.onel2(full_feat_test_ndoml1,cl_feature.HV.MS,"MS",0.05)
+
+```
+
+
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
 #### Investigate correlation through chart plot
 
 # #### Significant in HV but not in MS
@@ -791,8 +1034,8 @@ mat.feat_func.onel(full_feat_train_Sndoml3,cl_feature.HV.MS,"MS",0.001)
 # data12 <- na.omit(data.frame(mat.feat_func.onel(try,cl_feature.HV.MS,"MS",0.001)$pat_data[,c("F5","F38")], mat.feat_func.onel(try,cl_feature.HV.MS,"MS",0.001)$cl_data[,c("C8","C21")]))
 
 
-data11 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"HV",0.001)$pat_data[,c("F29","F38")], mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"HV",0.001)$cl_data[,c("C1","C9")]))
-data12 <- na.omit(data.frame(mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"MS",0.001)$pat_data[,c("F29","F38")], mat.feat_func.onel(full_feat_train_Sdoml1,cl_feature.HV.MS,"MS",0.001)$cl_data[,c("C1","C9")]))
+data11 <- na.omit(data.frame(mat.feat_func.onel2(full_feat_train_doml1,cl_feature.HV.MS,"HV",0.05)$pat_data[,c("F13","F24")], mat.feat_func.onel2(full_feat_train_doml1,cl_feature.HV.MS,"HV",0.05)$cl_data[,c("C20","C21")]))
+data12 <- na.omit(data.frame(mat.feat_func.onel2(full_feat_train_doml1,cl_feature.HV.MS,"MS",0.05)$pat_data[,c("F13","F24")], mat.feat_func.onel2(full_feat_train_doml1,cl_feature.HV.MS,"MS",0.05)$cl_data[,c("C20","C21")]))
 
 PerformanceAnalytics::chart.Correlation(data11, histogram=TRUE, pch=19, method = "spearman")
 
@@ -844,7 +1087,7 @@ corrplot(res_cl.MS.S$r, type="upper", order="original", col = col,
 
 
 ## Clinical feature selection
-Here we will select only a number of clinical features using high correlation test and also removing features that havce all 0 in the Healthy cohorts (Feature 15, 16, 26, 27, and 28)
+Here we will select only a number of clinical features using high correlation test and also removing features that have all 0 in the Healthy cohorts (Feature 15, 16, 26, 27, and 28)
 
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}

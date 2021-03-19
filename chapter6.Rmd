@@ -4,28 +4,283 @@ Here we perform different model evaluation by checking how good these models can
 
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
-#### First we will extract the following for dominant and non-dominant:
-## xtrain_HV, x_trainMS, x_testHV, , x_testMS, 
-## And then the following from clinical features
-## y_trainHV, y_trainMS, y_testHV, y_testMS
-all_cl_test <- cl_test2 %>% 
-  dplyr::mutate(testdate = as.Date(testdate)) %>% 
-  dplyr::select(patient_id, testdate, neuro_testdate, apptest_to_neurotest, gender, 
-                diagnosis, diagnosis_group, dominant_hand, age, X9HPT.Avg, BMI, everything(),-id)
-colnames(all_cl_test)[10:41] <- paste("C",1:32, sep ="")
+## Select clinical features that we will use as ground-truth (C1, C6, C7, and C22)
+cl_feature.model <- cl_feature.HV.MS %>% 
+  dplyr::select(patient_id, testdate, diagnosis_group, C1, C6, C7, C22) %>% 
+  dplyr::mutate(testdate = as.Date(testdate, format = "%m/%d/%Y"))
 
-all_cl_train <- cl_train %>% 
-  dplyr::mutate(testdate = as.Date(testdate,  format = "%m/%d/%Y")) %>% 
-  dplyr::select(patient_id, testdate, neuro_testdate, apptest_to_neurotest, gender, 
-                diagnosis, diagnosis_group, dominant_hand, age, X9HPT.Avg, BMI, everything(),-id)
-colnames(all_cl_train)[10:41] <- paste("C",1:32, sep ="")
+## Select relevent patient-derived features (C1, C6, C7, and C22) (training and test sets)
+feature_train.model <- full_feature_train %>% 
+  dplyr::select(patient_id, testdate, difficulty_level, diagnosis_group, 
+                dominant_hand_use, F4, F8, F12, F24) %>% 
+  dplyr::mutate(testdate = as.Date(testdate))
+ 
+feature_test.model <- full_feature_test2 %>% 
+  dplyr::select(patient_id, testdate, difficulty_level, diagnosis_group, 
+                dominant_hand_use, F4, F8, F12, F24) %>% 
+  dplyr::mutate(testdate = as.Date(testdate))
 
-all_cl_data <- cl_feature.HV.MS %>% dplyr::mutate(testdate = as.Date(testdate, format = "%m/%d/%Y"))
+##############################################
+#### Extract the different difficulty level and dominant hand for training and test sets
+
+######################## Training set
+## Difficulty Level 1
+feat_train_doml1 <- feature_train.model %>% 
+  subset(difficulty_level=="1" & dominant_hand_use=="YES") 
+feat_train_ndoml1 <- feature_train.model %>% 
+  subset(difficulty_level=="1" & dominant_hand_use=="NO") 
+
+## Difficulty Level 2
+feat_train_doml2 <- feature_train.model %>% 
+  subset(difficulty_level=="2" & dominant_hand_use=="YES") 
+feat_train_ndoml2 <- feature_train.model %>% 
+  subset(difficulty_level=="2" & dominant_hand_use=="NO")
+
+## Difficulty Level 3
+feat_train_doml3 <- feature_train.model %>% 
+  subset(difficulty_level=="3" & dominant_hand_use=="YES") 
+feat_train_ndoml3 <- feature_train.model %>% 
+  subset(difficulty_level=="3" & dominant_hand_use=="NO") 
+
+######################## Test set
+## Difficulty Level 1
+feat_test_doml1 <- feature_test.model %>% 
+  subset(difficulty_level=="1" & dominant_hand_use=="YES") 
+feat_test_ndoml1 <- feature_test.model %>% 
+  subset(difficulty_level=="1" & dominant_hand_use=="NO") 
+
+## Difficulty Level 2
+feat_test_doml2 <- feature_test.model %>% 
+  subset(difficulty_level=="2" & dominant_hand_use=="YES") 
+feat_test_ndoml2 <- feature_test.model %>% 
+  subset(difficulty_level=="2" & dominant_hand_use=="NO")
+
+## Difficulty Level 3
+feat_test_doml3 <- feature_test.model %>% 
+  subset(difficulty_level=="3" & dominant_hand_use=="YES") 
+feat_test_ndoml3 <- feature_test.model %>% 
+  subset(difficulty_level=="3" & dominant_hand_use=="NO") 
+
+################## Outlier removal
+
+## Function to detect and remove outlier from a given trial
+outlier.df_func <- function(dataframe){
+  ## dataframe is a data frame containing features
+  data_with_id <- dataframe %>% dplyr::mutate(id = row_number())
+  col_names <- c("F4", "F8", "F12", "F24")#colnames(dataframe) ## Features
+  all.outlier_index <- c() ## initialize an empty vector
+  
+  for (j in col_names){
+  outlier_index <- tsoutliers(data_with_id[,j], lambda = "auto")$index
+  all.outlier_index <- c(all.outlier_index, outlier_index)
+  }
+  ## Remove repeating indexes
+  outlier_index2 <- unique(all.outlier_index)
+  
+  if (length(outlier_index2) == 0){
+    new_data = data_with_id %>% dplyr::select(-id)
+  } else {
+    new_data = data_with_id %>% dplyr::filter(!(id %in% outlier_index2)) %>%
+      dplyr::select(-id)
+  }
+  return(new_data)
+}
+
+```
 
 
-#### Patient derived features
-all_full_train <- full_feature_train %>% dplyr::mutate(testdate = as.Date(testdate))
-all_full_test <- full_feature_test %>% dplyr::mutate(testdate = as.Date(testdate))
+## Random forest regression tree
+
+We use random forest regression to fit to the training data. The prediction error was measured by the Root Mean Square Error (RMSE), which corresponds to the average difference between the observed known values of the outcome and the predicted value by the model. To limit overfitting of the training set, 10-Fold cross-validation with 5 repeats were used. the test set was used as a final validation set. See more explanation on [Jason Brownlee, 2016](https://machinelearningmastery.com/tune-machine-learning-algorithms-in-r/) or [Kassambara, 2018](http://www.sthda.com/english/articles/35-statistical-machine-learning-essentials/140-bagging-and-random-forest-essentials/) or [caret package](http://topepo.github.io/caret/model-training-and-tuning.html) or [ZevRoss, 2017](http://zevross.com/blog/2017/09/19/predictive-modeling-and-machine-learning-in-r-with-the-caret-package/).
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+## Construct a function that will conduct the random forest and predict the error given a training set, test set, and the name of dependent variable.
+
+randforest_func <- function(train_data,test_data,cl_data, diagnosis, cl_feat){
+  ## train_data and test_data are the training and test datasets 
+  ## cl_data is clinical feature data
+  ## cl_feat is the clinical feature we will use as ground truth in quotation
+  ## diagnosis is diagnosis group (HV or MS)
+ 
+  ## Take log of F1 and C1
+  train_data <- train_data %>% 
+    dplyr::mutate(F13 = log(F13 + 1, base = 2), F24 = log(F24 + 10, base = 2))
+  test_data <- test_data %>%  #group_by(difficulty_level, diagnosis_group) %>%
+    dplyr::mutate(F13 = log(F13 + 1, base = 2), F24 = log(F24 + 1, base = 2))
+  cl_data <- cl_data %>% #group_by(diagnosis_group) %>%
+    dplyr::mutate(C1 = log(C1 + 1, base = 2))
+  
+  ## Remove outliers and select diagnosis group
+  train_data2 <- train_data %>% 
+    dplyr::filter(diagnosis_group==diagnosis) %>% group_modify(~outlier.df_func(.x))
+  test_data2 <- test_data %>% 
+    dplyr::filter(diagnosis_group==diagnosis) %>% group_modify(~outlier.df_func(.x))
+    
+  ## return all rowss from pat_data where there are matching in cl_data 
+  merge.train_data <- dplyr::inner_join(train_data2, cl_data, by =
+                                         c("patient_id","testdate","diagnosis_group"))
+  merge.test_data <- dplyr::inner_join(test_data2, cl_data, by =
+                                         c("patient_id","testdate","diagnosis_group"))
+
+  ## Extract the training X and y datasets
+  pat.train_sub <- merge.train_data %>% ungroup() %>% dplyr::select(F1, F9, F13, F24) 
+  
+  cl.train_sub <- merge.train_data %>% ungroup() %>% dplyr::select(cl_feat) 
+  cl.train <- cl.train_sub[[1]]
+  
+  ## Extract the test X and y datasets
+  pat.test_sub <- merge.test_data %>% ungroup() %>% dplyr::select( F1, F9, F13, F24) 
+  
+  cl.test_sub <- merge.test_data %>% ungroup() %>% dplyr::select(cl_feat) 
+  cl.test <- cl.test_sub[[1]]
+  
+  #############
+  ## Fit the random forest model to the training set
+  set.seed(123)
+  control <- trainControl(method="repeatedcv", number=5, repeats=20, search="grid", 
+                          allowParallel = TRUE)
+  tg <- expand.grid(mtry=c(1:20)) ## all the mtry parameter to use in the tuning
+  
+  ## Parallel computing
+  cl<-makePSOCKcluster(8)
+  registerDoParallel(cl)
+  
+  model <- train(x = pat.train_sub, y = cl.train, method = "rf", ntree = 2000, 
+                 metric = "RMSE", trControl = control, tuneGrid = tg)
+  
+  stopCluster(cl) 
+  
+  res <- arrange(model$results, RMSE)
+  rmse_cv <- res$RMSE[1]
+  rmse_cvSD <- res$RMSESD[1]
+  r2_cv <- res$Rsquared[1]
+  r2_cvSD <- res$RsquaredSD[1]
+  #######
+  ## Make prediction on the test data
+  predictions <- model %>% predict(pat.test_sub)
+  
+  ## Compute the average prediction error RMSE
+  rmse_test <- RMSE(predictions, cl.test)
+  r2_test <- R2(predictions, cl.test)
+  
+  ## Final result
+  result <- data.frame(rmse_cv = rmse_cv, rmse_cvSD= rmse_cvSD,r2_cv=r2_cv, r2_cvSD=r2_cvSD,
+                       rmse_test=rmse_test, r2_test=r2_test)
+  
+  return(list(cv=arrange(model$results,RMSE),df=result))
+} 
+
+ptm <- proc.time() ##  11.22 seconds
+randforest_func(feat_train_doml2, feat_test_doml2,cl_feature.model,"HV","C1")
+randforest_func(feat_train_ndoml2, feat_test_ndoml2,cl_feature.model,"HV","C1")
+proc.time() - ptm
+
+
+train.m <- full_feature_train %>% subset(difficulty_level=="1" & dominant_hand_use=="YES") %>%
+  dplyr::mutate(testdate = as.Date(testdate), patient_id=as.character(patient_id))
+test.m <- full_feature_test2 %>% subset(difficulty_level=="1" & dominant_hand_use=="YES") %>%
+  dplyr::mutate(testdate = as.Date(testdate), patient_id=as.character(patient_id))
+mergetr <- dplyr::inner_join(train.m, cl_feature.model, by = c("patient_id","testdate","diagnosis_group"))
+mergete <- dplyr::inner_join(test.m, cl_feature.model, by = c("patient_id","testdate","diagnosis_group"))
+
+tr <- subset(mergetr, diagnosis_group=="MS")
+te <- subset(mergete, diagnosis_group=="MS")
+
+plot(tr$F24,tr$F35, xlab = "Sum of HD", ylab="Time to complete drawing (in Seconds)", main ="MS, Non-dominant, difficulty level 1")
+
+nib204 <- subset(full_feature2,patient_id=="NIB204" & difficulty_level =="1" & dominant_hand_use=="YES")
+nds710 <- subset(full_feature2,patient_id=="NDS710" & difficulty_level =="1" & dominant_hand_use=="YES")
+nds701 <- subset(full_feature2,patient_id=="NDS701" & difficulty_level =="1" & dominant_hand_use=="YES")
+
+plot(nib204$ntest_date,nib204$F35,xlab = "# of test taken", ylab="Time to complete drawing (in Seconds)", main ="NIB204-MS, Dominant, difficulty level 1")
+# 
+# 
+# 
+# cl<-makePSOCKcluster(14)
+#   registerDoParallel(cl)
+#   model1 <- train(x = tr[,c("F1","F9","F13","F24","F25","F29","F30","F35","F38")], y = as.numeric(tr[,"C1"]), method = "gbm", metric = "RMSE", trControl = trainControl(method="repeatedcv", number=10, repeats=5, search="grid"), tuneGrid = tg, verbose = FALSE)
+#    stopCluster(cl)
+
+```
+
+
+Now we check the distribution of the features in healthy and MS cohorts. First data are transformed using a bi-symmetric log transformation described in [Beau and Webber, 2013](https://iopscience.iop.org/article/10.1088/0957-0233/24/2/027001/pdf?casa_token=Grh7602hB6sAAAAA:bzA7gUwgKtzyqjkLe4Zchl349qfaOLlcJBgmflVyrDf97Vd0W175DtvRnAnnf1PDElSpBLRg4-U5Z0crXCLg).
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
+
+## Bi-symmetric log transformation function
+bisym.log_func <- function(x){return(sign(x)*log10(1 + abs(x/(1/log(10)))))}
+
+####### Clinical features
+cl_feature.dist <- cl_feature.model %>% dplyr::select(diagnosis_group,C1,C6,C7,C22) %>% 
+  dplyr::mutate(C1 = bisym.log_func(C1), C6 = bisym.log_func(C6), C7 = bisym.log_func(C7),
+                C22 = bisym.log_func(C22))
+
+cl_data.long <- tidyr::gather(cl_feature.dist, Feature, value, C1:C22, factor_key=TRUE)
+cl_data.long$diagnosis_group <- factor(cl_data.long$diagnosis_group, levels = c("HV","MS"),
+                                       labels = c("HC","MS"))
+cl_data.long$Feature <- factor(cl_data.long$Feature, levels = c("C1","C6","C7","C22"),
+                                       labels = c("9HPT Average",
+                                                  "EDSS",
+                                                  "CombiWISE",
+                                                  "NeurEx"))
+
+ggplot(cl_data.long, aes(x = diagnosis_group, y = value )) + 
+  geom_boxplot(aes(fill = diagnosis_group)) +
+  scale_fill_manual(values = c("blue","red")) +
+  facet_wrap(~Feature, nrow = 2, scales = "free_y") +
+  labs(x = "",y = "") +
+  theme_bw()  + Nice.Label + theme(legend.position = "none")
+
+
+######################
+
+feat.boxplot_func <- function(data){
+  ## data is the daframe containing the F4, F8, F12, and F24 features
+  
+  data <- data %>% dplyr::mutate(F4 = bisym.log_func(F4), F8 = bisym.log_func(F8), 
+                                 F12 = bisym.log_func(F12), F24 = bisym.log_func(F24))
+  
+  ## convert data to long format
+  pat_long <- tidyr::gather(data[,c("diagnosis_group","F4","F8","F12","F24")], 
+                            Feature, value, F4:F24, factor_key=TRUE)
+  pat_long$diagnosis_group <- factor(pat_long$diagnosis_group, levels = c("HV","MS"),
+                                       labels = c("HC","MS"))
+  pat_long$Feature <- factor(pat_long$Feature, levels = c("F4","F8","F12","F24"),
+                                       labels = c("Kurtosis of Velocity",
+                                                  "Kurtosis of Radial Velocity",
+                                                  "Kurtosis of Angular Velocity",
+                                                  "Sum of Hausdorff Distance"))
+
+ggplot(pat_long, aes(x = diagnosis_group, y = value )) + 
+  geom_boxplot(aes(fill = diagnosis_group)) +
+  scale_fill_manual(values = c("blue","red")) +
+  facet_wrap(~Feature, nrow = 2, scales = "free_y") +
+  labs(x = "",y = "") +
+  theme_bw()  + Nice.Label + theme(legend.position = "none")
+}
+
+
+feat.boxplot_func(feat_train_doml1)
+
+#### Visualize the plot individually after treating the outlier
+
+data11 <- na.omit(data.frame(mat.feat_func.onel2(outlier.df_func(full_feat_train_doml1),cl_feature.HV.MS,"HV",0.05)$pat_data[,c("F13","F24")], mat.feat_func.onel2(outlier.df_func(full_feat_train_doml1),cl_feature.HV.MS,"HV",0.05)$cl_data[,c("C20","C21")]))
+data12 <- na.omit(data.frame(mat.feat_func.onel2(outlier.df_func(full_feat_train_doml1),cl_feature.HV.MS,"MS",0.05)$pat_data[,c("F13","F24")], mat.feat_func.onel2(outlier.df_func(full_feat_train_doml1),cl_feature.HV.MS,"MS",0.05)$cl_data[,c("C20","C21")]))
+
+PerformanceAnalytics::chart.Correlation(data11, histogram=TRUE, pch=19, method = "spearman")
+
+```
+
+
+
+
+
+
+```{r  message=FALSE, warning=FALSE, include=FALSE}
 
 ## Construct a function that will output training and test set given difficulty level, and dominance
 

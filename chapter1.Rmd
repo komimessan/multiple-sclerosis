@@ -3,7 +3,8 @@
 Smartphone devices may be an easier alternative to obtain data from patients outside of clinics and hospitals environment. In this project, smartphone-based data were obtained from Multiple Sclerosis (MS) patients using a drawing a spiral test. The test was administered in order to measure upper extremity functionality. 
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
-### Libraries
+###### Libraries
+## packages for features calculation
 library(openxlsx) ## v. 4.1.5
 library(dplyr) ## v. 1.0.0
 library(ggplot2) ## v. 3.3.1
@@ -30,8 +31,12 @@ library(SpatEntropy) ##v. 0.1.0 ## For Image entropy using shannon
 library(ggVennDiagram) ## v. 0.3 ## for ggplot vendiagram
 library(irr) ## v. ## to calculate inter-rater reliability
 library(robust) ## v.0.5.0.0 ## To calculate true correlation that is not sensitive to outliers covRob
+## packages for model evaluation
 library(glmnet) ## v. 4.0.2 ## For Lasso regression
 library(ipflasso) ##v. 1.1 ## For Lasso regression with repeated cross-validation
+library(caret) ## v. 6.0.86 ## For hyperparameter tuning in machine learning
+library(randomForest) ## v. 4.6.14 ## random forest model
+library(doParallel) ## v. 1.0.16 ## for parallel computation
 ```
 
 
@@ -267,8 +272,8 @@ black.bold.text1 <- element_text(face = "bold", color = "black",size=24) # x and
 black.bold.text2 <- element_text(face = "bold", color = "black",size=24) # title
 Nice.Label <-theme(axis.text.x = element_text(face="bold", color="black", size=14),
          axis.text.y = element_text(face="bold", color="black", size=14),
-         title=black.bold.text2,axis.title = black.bold.text1, legend.position = "right",legend.box = "vertical",
-         legend.text = element_text(size=24),strip.text.x = element_text(face="bold",size=24)) #18 or 24
+         title=black.bold.text2,axis.title = black.bold.text1, legend.position = "bottom",legend.box = "vertical",
+         legend.text = element_text(size=24), strip.text.x = element_text(face="bold",size=16), strip.text.y = element_text(face="bold",size=16)) #18 or 24
 
 ### Tranform from long tabel to wide table
 
