@@ -349,6 +349,33 @@ data_func <- function(pat_data, cl_data, difficulty, alpha, dominant, diagnosis)
 ```
 
 
+## Plot R2 Value of out-of-sample test performance
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
+##################### PLOTTING ICC vs. Log2FC
+
+#### Read in the data
+r2_data <- read.csv("modelsR2_value.csv", header = TRUE)
+colnames(r2_data) <- c("model","difficulty","hand","r2")
+r2_data$model <- factor(r2_data$model, levels = c("LM","ElasticNet","SVR Radial","RF","GBM"))
+
+#### Plot ICC By group
+
+ggplot(r2_data, aes(x=model, y=r2)) +
+  geom_bar(stat="identity", position=position_dodge(), fill = "steelblue", alpha =0.7)+
+  geom_text(aes(label=round(r2,3)), vjust=1.6, color="black",
+            position = position_dodge(0.9), size=4) + 
+  labs(x = "", y ="") + 
+  facet_grid(hand~difficulty) +
+  theme_bw() + theme(axis.text.x = element_text(angle = 90),
+                     legend.title=element_blank()) + Nice.Label
+
+
+```
+
+
+
 Description on how to perform Lasso with Cross-validation is display in [document](http://www.science.smith.edu/~jcrouser/SDS293/labs/lab10-r.html).
 
 

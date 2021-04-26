@@ -5,7 +5,7 @@ Smartphone devices may be an easier alternative to obtain data from patients out
 ```{r echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 ###### Libraries
 ## packages for features calculation
-library(openxlsx) ## v. 4.1.5
+#library(openxlsx) ## v. 4.1.5
 library(dplyr) ## v. 1.0.0
 library(ggplot2) ## v. 3.3.1
 library(wavelets) ## v. 0.3.0.2 ## for wavelet transform -- https://cran.r-project.org/web/packages/wavelets/wavelets.pdf
@@ -18,19 +18,26 @@ library(tidyr) ## v. 1.1.0 ## for gather and wide
 library(VennDiagram) ## v.1.6.20 ## Venn diagram 
 library(forecast) ## v. 8.13 ## for outlier detection https://cran.r-project.org/web/packages/forecast/forecast.pdf
 library(fda.usc) ## v. 2.0.2
-library(pathmapping) ## v. 1.0.2 ## For Area Under two curves ##https://cran.r-project.org/web/packages/pathmapping/pathmapping.pdf
-library(DescTools) ## v. 0.99.38 ## ## For trapezoid rule https://www.rdocumentation.org/packages/DescTools/versions/0.99.37
+#library(pathmapping) ## v. 1.0.2 ## For Area Under two curves ##https://cran.r-project.org/web/packages/pathmapping/pathmapping.pdf
+#library(DescTools) ## v. 0.99.38 ## ## For trapezoid rule https://www.rdocumentation.org/packages/DescTools/versions/0.99.37
 #library(SpatEntropy) ##v.0.1.0 ## For Image Entropy ## https://cran.r-project.org/web/packages/SpatEntropy/SpatEntropy.pdf
 #library(raster) ## v. 3.3.13 ## to create a grid of x y, coordinates of z values
 library(corrplot) ##v.0.84 ## for correlation matrix plot
 library(Hmisc) ## v.4.4.0 ## to calculate matrix of correlation and pvalue
 library(multcompView) ## v. 0.1.8 ## to generate letters from Tukey test
+#install.packages("CulturalAnalytics", repos="http://R-Forge.R-project.org")
 library(CulturalAnalytics) ## v. 1.0.7 ## for image entropy
 library(entropy) ## v. 1.2.1 ## To use discretize2d for 2D binning 
+#### Installing package "SpatEntropy" that have been removed from CRAN
+#url <- "https://cran.r-project.org/src/contrib/Archive/SpatEntropy/SpatEntropy_0.1.0.tar.gz"
+#pkgFile <- "SpatEntropy_0.1.0.tar.gz"
+#download.file(url = url, destfile = pkgFile)
+#install.packages("spatstat")
+#install.packages(pkgs=pkgFile, type="source", repos=NULL)
 library(SpatEntropy) ##v. 0.1.0 ## For Image entropy using shannon
 library(ggVennDiagram) ## v. 0.3 ## for ggplot vendiagram
 library(irr) ## v. ## to calculate inter-rater reliability
-library(robust) ## v.0.5.0.0 ## To calculate true correlation that is not sensitive to outliers covRob
+#library(robust) ## v.0.5.0.0 ## To calculate true correlation that is not sensitive to outliers covRob
 ## packages for model evaluation
 library(glmnet) ## v. 4.0.2 ## For Lasso regression
 library(ipflasso) ##v. 1.1 ## For Lasso regression with repeated cross-validation

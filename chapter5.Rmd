@@ -240,38 +240,69 @@ full_feature_test2 <- rbind(full_feature_test, subset(full_feature_train, diagno
 
 ```{r  message=FALSE, warning=FALSE, include=FALSE}
 ## Obtain demographic information of entire dataset
+train_data <- subset(full_feature_train, diagnosis_group=="MS")
+test_data <- subset(full_feature_test2, diagnosis_group=="MS")
+HV_data <- subset(full_feature_test2, diagnosis_group=="HV")
+## Gender
+train_gender <- train_data %>% group_by(gender) %>% dplyr::summarise(gender_count=n_distinct(patient_id))
+test_gender <- test_data %>% group_by(gender) %>% dplyr::summarise(gender_count=n_distinct(patient_id))
+HV_gender <- HV_data %>% group_by(gender) %>% dplyr::summarise(gender_count=n_distinct(patient_id))
+## Handedness
+train_hand <- train_data %>% group_by(dominant_hand) %>%
+  dplyr::summarise(hand_count=n_distinct(patient_id))
+test_hand <- test_data %>% group_by(dominant_hand) %>%
+  dplyr::summarise(hand_count=n_distinct(patient_id))
+HV_hand <- HV_data %>% group_by(dominant_hand) %>% dplyr::summarise(hand_count=n_distinct(patient_id))
+
+## Select one level for each dataset
+train_l3 <- train_data %>% dplyr::filter(difficulty_level=="3") %>% dplyr::mutate(group="MS-Train")
+test_l3 <- test_data %>% dplyr::filter(difficulty_level=="3")%>% dplyr::mutate(group="MS-Test")
+HV_l3 <- HV_data %>% dplyr::filter(difficulty_level=="3")%>% dplyr::mutate(group="HC")
+
+## Combine all three datasets
+data.stat_l3 <- rbind(train_l3,test_l3, HV_l3)
 
 # Select difficulty level 1 and only MS and HV patients
-full_data.stat_l1 <- full_feature2 %>% dplyr::filter(difficulty_level=="1")
+#full_data.stat_l1 <- full_feature2 %>% dplyr::filter(difficulty_level=="3")
 
 ## Find age attributes by HV and MS
-age.stat <- full_data.stat_l1 %>% 
-  group_by(diagnosis_group) %>% dplyr::select(age) %>% 
+age.stat <- data.stat_l3 %>% 
+  group_by(group) %>% dplyr::select(age) %>% 
   summarise_each(funs(mean=mean(., na.rm = TRUE), 
                       sd=sd(., na.rm = TRUE), 
                       median = median(., na.rm = TRUE),
                       min = min(., na.rm = TRUE),
                       max = max(., na.rm = TRUE)))
-  
+
+
+## Kruskal wallis Non-parametric test for statistical differences in age
+kruskal.test(age ~ group, data = data.stat_l3)
+
+## Testing if the row and column of contingency table are independent (Null Hypothesis)
+## Chi-squared test of association of gender between HC, MS-Test, and MS-Train
+chisq.test(table(data.stat_l3[,c("gender","group")]))
+
+## Chi-squared test of association of gender between HC, MS-Test, and MS-Train
+chisq.test(table(data.stat_l3[,c("dominant_hand","group")]))
 
 ## Total number of patient, number of dominant hands, and number of male\female by HV and MS
-total_patient <- full_data.stat_l1 %>% 
-  dplyr::select(diagnosis_group, patient_id, gender, dominant_hand, age) %>% 
-  distinct(patient_id, .keep_all = TRUE) %>% 
-  group_by(diagnosis_group) %>%
-  dplyr::summarise(patient = n())
-
-total_gender <- full_data.stat_l1 %>% 
-  dplyr::select(diagnosis_group, patient_id, gender, dominant_hand, age) %>% 
-  distinct(patient_id, .keep_all = TRUE) %>% 
-  group_by(diagnosis_group,gender) %>%
-  tally()
-
-total_handedness <- full_data.stat_l1 %>% 
-  dplyr::select(diagnosis_group, patient_id, gender, dominant_hand, age) %>% 
-  distinct(patient_id, .keep_all = TRUE) %>% 
-  group_by(diagnosis_group,dominant_hand) %>%
-  tally()
+# total_patient <- full_data.stat_l1 %>% 
+#   dplyr::select(diagnosis_group, patient_id, gender, dominant_hand, age) %>% 
+#   distinct(patient_id, .keep_all = TRUE) %>% 
+#   group_by(diagnosis_group) %>%
+#   dplyr::summarise(patient = n())
+# 
+# total_gender <- full_data.stat_l1 %>% 
+#   dplyr::select(diagnosis_group, patient_id, gender, dominant_hand, age) %>% 
+#   distinct(patient_id, .keep_all = TRUE) %>% 
+#   group_by(diagnosis_group,gender) %>%
+#   tally()
+# 
+# total_handedness <- full_data.stat_l1 %>% 
+#   dplyr::select(diagnosis_group, patient_id, gender, dominant_hand, age) %>% 
+#   distinct(patient_id, .keep_all = TRUE) %>% 
+#   group_by(diagnosis_group,dominant_hand) %>%
+#   tally()
     
 
 ## Obtain total number of granular and regular patient
@@ -722,19 +753,37 @@ fc.ndoml2 <- HV.v.MS_func(full_feat_train_ndoml2.Sign, "NO", "2","diagnosis_grou
 fc.ndoml3 <- HV.v.MS_func(full_feat_train_ndoml3.Sign, "NO", "3","diagnosis_group","F")
 
 #### Combine Fold-change and ICC of healthy volunteers data frame
-icc.fc.doml1 <- data.frame(merge(icc.HV.doml1, fc.doml1, by = "Feature"), difficulty = "Difficulty Level 1")
-icc.fc.doml2 <- data.frame(merge(icc.HV.doml2, fc.doml2, by = "Feature"), difficulty = "Difficulty Level 2")
-icc.fc.doml3 <- data.frame(merge(icc.HV.doml3, fc.doml3, by = "Feature"), difficulty = "Difficulty Level 3")
+DL1 <- "Difficulty Level 1"
+DL2 <- "Difficulty Level 2"
+DL3 <- "Difficulty Level 3"
+## Healthy Cohorts
+icc.fc.doml1 <- data.frame(merge(icc.HV.doml1, fc.doml1, by = "Feature"), difficulty = DL1)
+icc.fc.doml2 <- data.frame(merge(icc.HV.doml2, fc.doml2, by = "Feature"), difficulty = DL2)
+icc.fc.doml3 <- data.frame(merge(icc.HV.doml3, fc.doml3, by = "Feature"), difficulty = DL3)
 
-icc.fc.ndoml1 <- data.frame(merge(icc.HV.ndoml1, fc.ndoml1, by = "Feature"), difficulty = "Difficulty Level 1")
-icc.fc.ndoml2 <- data.frame(merge(icc.HV.ndoml2, fc.ndoml2, by = "Feature"), difficulty = "Difficulty Level 2")
-icc.fc.ndoml3 <- data.frame(merge(icc.HV.ndoml3, fc.ndoml3, by = "Feature"), difficulty = "Difficulty Level 3")
+icc.fc.ndoml1 <- data.frame(merge(icc.HV.ndoml1, fc.ndoml1, by = "Feature"), difficulty = DL1)
+icc.fc.ndoml2 <- data.frame(merge(icc.HV.ndoml2, fc.ndoml2, by = "Feature"), difficulty = DL2)
+icc.fc.ndoml3 <- data.frame(merge(icc.HV.ndoml3, fc.ndoml3, by = "Feature"), difficulty = DL3)
 
 icc.fc.dom <- data.frame(rbind(icc.fc.doml1, icc.fc.doml2, icc.fc.doml3), hand = "Dominant")
 icc.fc.ndom <- data.frame(rbind(icc.fc.ndoml1, icc.fc.ndoml2, icc.fc.ndoml3), hand = "Non-dominant")
 
 icc.fc <- rbind(icc.fc.dom,icc.fc.ndom) ### Merge the entire datasets of icc vs. fold change
 
+## MS Patients
+ms.icc.fc.doml1 <- data.frame(merge(icc.MS.doml1, fc.doml1, by = "Feature"), difficulty = DL1)
+ms.icc.fc.doml2 <- data.frame(merge(icc.MS.doml2, fc.doml2, by = "Feature"), difficulty = DL2)
+ms.icc.fc.doml3 <- data.frame(merge(icc.MS.doml3, fc.doml3, by = "Feature"), difficulty = DL3)
+
+ms.icc.fc.ndoml1 <- data.frame(merge(icc.MS.ndoml1, fc.ndoml1, by = "Feature"), difficulty = DL1)
+ms.icc.fc.ndoml2 <- data.frame(merge(icc.MS.ndoml2, fc.ndoml2, by = "Feature"), difficulty = DL2)
+ms.icc.fc.ndoml3 <- data.frame(merge(icc.MS.ndoml3, fc.ndoml3, by = "Feature"), difficulty = DL3)
+
+ms.icc.fc.dom <- data.frame(rbind(ms.icc.fc.doml1, ms.icc.fc.doml2, ms.icc.fc.doml3), hand = "Dominant")
+ms.icc.fc.ndom <- data.frame(rbind(ms.icc.fc.ndoml1, ms.icc.fc.ndoml2, ms.icc.fc.ndoml3), 
+                             hand = "Non-dominant")
+
+ms.icc.fc <- rbind(ms.icc.fc.dom,ms.icc.fc.ndom) ### Merge the entire datasets of icc vs. fold change
 ############################################### Test sets
 
 ##### Statistical Significant Features
@@ -768,20 +817,14 @@ fc.ndoml2.tst <- HV.v.MS_func(full_feat_test_ndoml2.Sign, "NO", "2","diagnosis_g
 fc.ndoml3.tst <- HV.v.MS_func(full_feat_test_ndoml3.Sign, "NO", "3","diagnosis_group","F")
 
 #### Combine Fold-change and ICC of healthy volunteers data frame
-icc.fc.doml1.tst <- data.frame(merge(icc.HV.doml1, fc.doml1.tst, by = "Feature") ,
-                               difficulty="Difficulty Level 1") 
-icc.fc.doml2.tst <- data.frame(merge(icc.HV.doml2, fc.doml2.tst, by = "Feature"),
-                               difficulty="Difficulty Level 2")
-icc.fc.doml3.tst <- data.frame(merge(icc.HV.doml3, fc.doml3.tst, by = "Feature"),
-                               difficulty="Difficulty Level 3")
+### Healthy Cohorts
+icc.fc.doml1.tst <- data.frame(merge(icc.HV.doml1, fc.doml1.tst, by = "Feature") , difficulty=DL1) 
+icc.fc.doml2.tst <- data.frame(merge(icc.HV.doml2, fc.doml2.tst, by = "Feature"), difficulty=DL2)
+icc.fc.doml3.tst <- data.frame(merge(icc.HV.doml3, fc.doml3.tst, by = "Feature"), difficulty=DL3)
 
-icc.fc.ndoml1.tst <- data.frame(merge(icc.HV.ndoml1, fc.ndoml1.tst, by = "Feature"),
-                               difficulty="Difficulty Level 1")
-icc.fc.ndoml2.tst <- data.frame(merge(icc.HV.ndoml2, fc.ndoml2.tst, by = "Feature"),
-                               difficulty="Difficulty Level 2")
-icc.fc.ndoml3.tst <- data.frame(merge(icc.HV.ndoml3, fc.ndoml3.tst, by = "Feature"),
-                               difficulty="Difficulty Level 3")
-
+icc.fc.ndoml1.tst <- data.frame(merge(icc.HV.ndoml1, fc.ndoml1.tst, by = "Feature"), difficulty=DL1)
+icc.fc.ndoml2.tst <- data.frame(merge(icc.HV.ndoml2, fc.ndoml2.tst, by = "Feature"), difficulty=DL2)
+icc.fc.ndoml3.tst <- data.frame(merge(icc.HV.ndoml3, fc.ndoml3.tst, by = "Feature"), difficulty=DL3)
 
 icc.fc.dom.tst <- data.frame(rbind(icc.fc.doml1.tst, icc.fc.doml2.tst, icc.fc.doml3.tst), 
                              hand = "Dominant")
@@ -790,8 +833,34 @@ icc.fc.ndom.tst <- data.frame(rbind(icc.fc.ndoml1.tst, icc.fc.ndoml2.tst,
 
 icc.fc.tst <- rbind(icc.fc.dom.tst,icc.fc.ndom.tst) ### Merge the entire datasets of icc vs. fold change
 
+### MS Patients
+ms.icc.fc.doml1.tst <- data.frame(merge(icc.MS.doml1, fc.doml1.tst, by = "Feature") , difficulty=DL1) 
+ms.icc.fc.doml2.tst <- data.frame(merge(icc.MS.doml2, fc.doml2.tst, by = "Feature"), difficulty=DL2)
+ms.icc.fc.doml3.tst <- data.frame(merge(icc.MS.doml3, fc.doml3.tst, by = "Feature"), difficulty=DL3)
+
+ms.icc.fc.ndoml1.tst <- data.frame(merge(icc.MS.ndoml1, fc.ndoml1.tst, by = "Feature"), difficulty=DL1)
+ms.icc.fc.ndoml2.tst <- data.frame(merge(icc.MS.ndoml2, fc.ndoml2.tst, by = "Feature"), difficulty=DL2)
+ms.icc.fc.ndoml3.tst <- data.frame(merge(icc.MS.ndoml3, fc.ndoml3.tst, by = "Feature"), difficulty=DL3)
+
+ms.icc.fc.dom.tst <- data.frame(rbind(ms.icc.fc.doml1.tst, ms.icc.fc.doml2.tst, ms.icc.fc.doml3.tst), 
+                             hand = "Dominant")
+ms.icc.fc.ndom.tst <- data.frame(rbind(ms.icc.fc.ndoml1.tst, ms.icc.fc.ndoml2.tst, 
+                                    ms.icc.fc.ndoml3.tst), hand = "Non-dominant")
+
+ms.icc.fc.tst <- rbind(ms.icc.fc.dom.tst,ms.icc.fc.ndom.tst) ### Merge the entire datasets of icc vs. fold change
+
 ## Combine all
 icc.fc.all <- rbind(data.frame(icc.fc, Type = "Training Set"),data.frame(icc.fc.tst, Type = "Test Set"))
+icc.fc.all$Type <- factor(icc.fc.all$Type, levels = c("Training Set","Test Set"))
+ms.icc.fc.all <- rbind(data.frame(ms.icc.fc, Type = "Training Set"),
+                       data.frame(ms.icc.fc.tst, Type = "Test Set"))
+ms.icc.fc.all$Type <- factor(ms.icc.fc.all$Type, levels = c("Training Set","Test Set"))
+
+### Combine Features that have high ICC>0.5 and FC>2
+hc.sign.icc.fc <- data.frame(subset(icc.fc.all, Feature %in% c("F4","F8","F12","F24")),icc_diagnosis = "HC")
+ms.sign.icc.fc <- data.frame(subset(ms.icc.fc.all, Feature %in% c("F4","F8","F12","F24")), icc_diagnosis = "MS")
+sign.icc.fc <- rbind(hc.sign.icc.fc, ms.sign.icc.fc)
+sign.icc.fc$Feature <- factor(sign.icc.fc$Feature, levels = c("F4","F8","F12","F24"))
 
 ```
 
@@ -802,6 +871,8 @@ No we plot the ICC vs the Log2 Fold Change for significant features. Note that F
 ```{r echo=FALSE, warning=FALSE, message=FALSE, fig.height=12, fig.width= 16}
 ##################### PLOTTING ICC vs. Log2FC
 
+#### ICC from Healthy Cohorts
+
 ### Individual plot
 ggplot(icc.fc.doml1, aes(x=Log2FC, y=ICC, label = Label)) +
   geom_point(alpha=0.7, size = 8, color = "darkgray") +
@@ -811,7 +882,6 @@ ggplot(icc.fc.doml1, aes(x=Log2FC, y=ICC, label = Label)) +
   theme_bw() + Nice.Label2
 
 #### PLot in facet_grid
-
 ggplot(icc.fc, aes(x=FC, y=ICC, label = Label)) +
     geom_point(alpha=0.7, size = 8, color = "darkgray") +
     geom_text(size = 5) + xlim(0.0,2.9) + ylim(0.0,1.0)+
@@ -823,10 +893,43 @@ ggplot(icc.fc, aes(x=FC, y=ICC, label = Label)) +
 ggplot(icc.fc.all, aes(x=FC, y=ICC, label = Label, color=Type)) +
   geom_point(alpha=0.6,size = 8) +
   scale_color_manual(values = c('darkgray','green')) + 
-  geom_text(size = 5, alpha=1.2, color="black") + xlim(2,3)+ylim(0.5,1.00)+
+  geom_text(size = 5, alpha=1.2, color="black") + xlim(1.9,3)+ylim(0.5,1.00)+
   labs(x = "", y ="") + 
   facet_grid(hand~difficulty) +
   theme_bw() + theme(legend.title=element_blank()) + Nice.Label
+
+################# ICC from MS Patients
+
+#### PLot in facet_grid
+ggplot(ms.icc.fc, aes(x=FC, y=ICC, label = Label)) +
+    geom_point(alpha=0.7, size = 8, color = "darkgray") +
+    geom_text(size = 5) + xlim(0.0,2.9) + ylim(0.0,1.0)+
+    labs(x = "", y ="") +
+    facet_grid(hand~difficulty, scales = "free") +
+    theme_bw() + Nice.Label
+
+### Training and test set combined
+ggplot(ms.icc.fc.all, aes(x=FC, y=ICC, label = Label, color=Type)) +
+  geom_point(alpha=0.6,size = 8) +
+  scale_color_manual(values = c('darkgray','green')) + 
+  geom_text(size = 5, alpha=1.2, color="black") + xlim(1.9,3)+ylim(0.5,1.00)+
+  labs(x = "", y ="") + 
+  facet_grid(hand~difficulty) +
+  theme_bw() + theme(legend.title=element_blank()) + Nice.Label
+
+#### Plot ICC By group
+
+ggplot(subset(sign.icc.fc, Type=="Training Set"), aes(x=Feature, y=ICC, fill=icc_diagnosis)) +
+  geom_bar(stat="identity", position=position_dodge())+
+  scale_fill_manual(values = c('skyblue','slateblue3')) + 
+  geom_text(aes(label=round(ICC,2)), vjust=1.6, color="black",
+            position = position_dodge(0.9), size=4) + 
+  labs(x = "", y ="") + 
+  facet_grid(hand~difficulty) +
+  theme_bw() + theme(legend.title=element_blank()) + Nice.Label
+
+### check chapter 6 for R^2 plot
+
 ```
 
 
